@@ -55,6 +55,16 @@ pub enum BlockError {
 }
 
 #[derive(Debug, Error)]
+pub enum ChainError {
+    #[error("invalid genesis: {0}")]
+    Genesis(#[from] GenesisError),
+    #[error("unexpected block height: expected {expected}, got {actual}")]
+    UnexpectedBlockHeight { expected: u128, actual: u128 },
+    #[error(transparent)]
+    Block(#[from] BlockError),
+}
+
+#[derive(Debug, Error)]
 pub enum GenesisError {
     #[error("invalid genesis json: {0}")]
     Json(#[from] serde_json::Error),

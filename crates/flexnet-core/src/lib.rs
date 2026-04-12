@@ -1,6 +1,7 @@
 pub mod account;
 pub mod address;
 pub mod block;
+pub mod chain;
 pub mod codec;
 pub mod constants;
 pub mod error;
@@ -14,11 +15,12 @@ pub mod transfer;
 pub use account::Account;
 pub use address::Address;
 pub use block::Block;
+pub use chain::Chain;
 pub use codec::{
     EncodeCanonical, encode, encode_block_hash_input, encode_transactions_hash_input,
     encode_transfer_bytes, encode_transfer_signing_payload,
 };
-pub use error::{BlockError, GenesisError, HexEncodingError, TransferError};
+pub use error::{BlockError, ChainError, GenesisError, HexEncodingError, TransferError};
 pub use execute::{ExecutionOutcome, execute_block};
 pub use genesis::Genesis;
 pub use hash::{
