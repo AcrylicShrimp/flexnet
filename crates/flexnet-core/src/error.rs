@@ -65,6 +65,36 @@ pub enum ChainError {
 }
 
 #[derive(Debug, Error)]
+pub enum SimulationError {
+    #[error("simulation must contain at least one node")]
+    EmptySimulation,
+    #[error("invalid genesis: {0}")]
+    Genesis(#[from] GenesisError),
+    #[error("failed to initialize chain {index}: {error}")]
+    ChainInitialization { index: usize, error: ChainError },
+    #[error("failed to append block to chain {index}: {error}")]
+    ChainAppend { index: usize, error: ChainError },
+    #[error("simulation divergence at chain {index}: expected tip height {expected}, got {actual}")]
+    DivergedTipHeight {
+        index: usize,
+        expected: u128,
+        actual: u128,
+    },
+    #[error("simulation divergence at chain {index}: expected state hash {expected}, got {actual}")]
+    DivergedStateHash {
+        index: usize,
+        expected: Hash,
+        actual: Hash,
+    },
+    #[error("simulation divergence at chain {index}: expected tip hash {expected}, got {actual}")]
+    DivergedTipHash {
+        index: usize,
+        expected: Hash,
+        actual: Hash,
+    },
+}
+
+#[derive(Debug, Error)]
 pub enum GenesisError {
     #[error("invalid genesis json: {0}")]
     Json(#[from] serde_json::Error),

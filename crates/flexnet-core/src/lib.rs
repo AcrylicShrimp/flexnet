@@ -9,6 +9,7 @@ pub mod execute;
 pub mod genesis;
 pub mod hash;
 pub mod signature;
+pub mod simulation;
 pub mod state;
 pub mod transfer;
 
@@ -20,11 +21,14 @@ pub use codec::{
     EncodeCanonical, encode, encode_block_hash_input, encode_transactions_hash_input,
     encode_transfer_bytes, encode_transfer_signing_payload,
 };
-pub use error::{BlockError, ChainError, GenesisError, HexEncodingError, TransferError};
+pub use error::{
+    BlockError, ChainError, GenesisError, HexEncodingError, SimulationError, TransferError,
+};
 pub use execute::{ExecutionOutcome, execute_block};
 pub use genesis::Genesis;
 pub use hash::{
     Hash, hash_block, hash_block_with_transactions_hash, hash_state, hash_transactions,
 };
+pub use simulation::Simulation;
 pub use state::{State, StateDelta};
 pub use transfer::{SignatureBytes, Transfer};
