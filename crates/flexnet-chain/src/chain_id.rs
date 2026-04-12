@@ -18,3 +18,13 @@ impl Display for ChainId {
         write!(f, "0x{:04x}", self.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ChainId;
+
+    #[test]
+    fn displays_as_fixed_width_hex() {
+        assert_eq!(ChainId::new(0x1a2b).to_string(), "0x1a2b");
+    }
+}

@@ -124,3 +124,37 @@ impl TxTransfer {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{TransferPayload, TxTransfer};
+    use crate::{
+        address::Address,
+        chain_id::ChainId,
+        chain_version::ChainVersion,
+        crypto::{SecretKey, address_from_secret_key, sign},
+    };
+
+    #[test]
+    fn transfer_roundtrips_and_verifies_signature() {
+        let secret_key = SecretKey::new([1; 32]);
+        let payload = TransferPayload::new(
+            ChainId::new(1),
+            ChainVersion::new(1),
+            address_from_secret_key(&secret_key),
+            Address::new([2; 32]),
+            55,
+            9,
+        );
+        let mut signing_payload = Vec::with_capacity(payload.signing_payload_len());
+        payload.encode_signing_payload(&mut signing_payload);
+        let tx = TxTransfer::new(payload, sign(&secret_key, &signing_payload));
+        let mut encoded = Vec::with_capacity(tx.encoded_len());
+        tx.encode_canonical(&mut encoded);
+
+        let decoded = TxTransfer::decode_canonical(&encoded).unwrap();
+
+        assert_eq!(decoded, tx);
+        assert_eq!(decoded.verify_signature(), Ok(()));
+    }
+}

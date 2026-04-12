@@ -13,3 +13,15 @@ impl Account {
         self.balance == 0 && self.nonce == 0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Account;
+
+    #[test]
+    fn empty_account_detection_matches_balance_and_nonce() {
+        assert!(Account::new(0, 0).is_empty());
+        assert!(!Account::new(1, 0).is_empty());
+        assert!(!Account::new(0, 1).is_empty());
+    }
+}

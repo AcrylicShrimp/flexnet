@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum DecodeError {
     #[error("input too long")]
     InputTooLong,
@@ -75,5 +75,37 @@ impl<'a> Decoder<'a> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DecodeError, Decoder};
+
+    #[test]
+    fn decoder_reads_values_and_rejects_trailing_bytes() {
+        let input = [7, 1, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let mut decoder = Decoder::new(&input);
+
+        assert_eq!(decoder.read_u8_le().unwrap(), 7);
+        assert_eq!(decoder.read_u16_le().unwrap(), 1);
+        assert_eq!(decoder.read_u128_le().unwrap(), 9);
+        assert_eq!(
+            decoder.finish(),
+            Err(DecodeError::LengthExceeded {
+                expected: 19,
+                actual: input.len(),
+            })
+        );
+    }
+
+    #[test]
+    fn decoder_rejects_insufficient_input() {
+        let mut decoder = Decoder::new(&[1, 2, 3]);
+
+        assert_eq!(
+            decoder.read_fixed::<4>(),
+            Err(DecodeError::InsufficientInput)
+        );
     }
 }

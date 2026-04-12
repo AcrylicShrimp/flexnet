@@ -29,7 +29,7 @@ impl Signature {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum VerifyError {
     #[error("invalid verifying key")]
     InvalidVerifyingKey,
@@ -63,4 +63,23 @@ pub fn address_from_secret_key(secret_key: &SecretKey) -> Address {
             .verifying_key()
             .to_bytes(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SecretKey, VerifyError, address_from_secret_key, sign, verify};
+
+    #[test]
+    fn sign_and_verify_roundtrip() {
+        let secret_key = SecretKey::new([7; 32]);
+        let address = address_from_secret_key(&secret_key);
+        let message = b"flexnet";
+        let signature = sign(&secret_key, message);
+
+        assert_eq!(verify(&address, &signature, message), Ok(()));
+        assert_eq!(
+            verify(&address, &signature, b"other-message"),
+            Err(VerifyError::FailedToVerify)
+        );
+    }
 }

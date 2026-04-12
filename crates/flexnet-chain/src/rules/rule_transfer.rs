@@ -8,7 +8,7 @@ use crate::{
 };
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum TransferVerificationError {
     #[error("invalid chain id; expected {expected}, got {actual}")]
     InvalidChainId { expected: ChainId, actual: ChainId },
@@ -58,7 +58,7 @@ pub fn verify_transfer_stateless(
     Ok(())
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum TransferExecutionError {
     #[error("transfer verification failed: {0}")]
     VerificationError(#[from] TransferVerificationError),
@@ -116,4 +116,100 @@ pub fn execute_transfer(
     state_delta.update_account(tx.payload.to, to_account);
 
     Ok(state_delta)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        TransferExecutionError, TransferVerificationError, execute_transfer,
+        verify_transfer_stateless,
+    };
+    use crate::{
+        account::Account,
+        address::Address,
+        chain_config::ChainConfig,
+        chain_id::ChainId,
+        chain_version::ChainVersion,
+        crypto::{SecretKey, address_from_secret_key, sign},
+        state::State,
+        transactions::tx_transfer::{TransferPayload, TxTransfer},
+    };
+    use std::collections::BTreeMap;
+
+    fn config() -> ChainConfig {
+        ChainConfig {
+            chain_id: ChainId::new(1),
+            chain_version: ChainVersion::new(1),
+            max_transactions_per_block: 16,
+        }
+    }
+
+    fn state_with_accounts(accounts: &[(Address, Account)]) -> State {
+        State::new(BTreeMap::from_iter(accounts.iter().copied()))
+    }
+
+    fn signed_transfer(
+        secret_key: &SecretKey,
+        to: Address,
+        amount: u128,
+        nonce: u128,
+    ) -> TxTransfer {
+        let payload = TransferPayload::new(
+            ChainId::new(1),
+            ChainVersion::new(1),
+            address_from_secret_key(secret_key),
+            to,
+            amount,
+            nonce,
+        );
+        let mut signing_payload = Vec::with_capacity(payload.signing_payload_len());
+        payload.encode_signing_payload(&mut signing_payload);
+        TxTransfer::new(payload, sign(secret_key, &signing_payload))
+    }
+
+    #[test]
+    fn reject_transfer_to_self() {
+        let secret_key = SecretKey::new([1; 32]);
+        let address = address_from_secret_key(&secret_key);
+        let tx = signed_transfer(&secret_key, address, 5, 0);
+
+        assert_eq!(
+            verify_transfer_stateless(&tx, &config()),
+            Err(TransferVerificationError::UnableToTransferToSelf)
+        );
+    }
+
+    #[test]
+    fn reject_transfer_with_wrong_nonce() {
+        let alice_key = SecretKey::new([1; 32]);
+        let bob = Address::new([2; 32]);
+        let alice = address_from_secret_key(&alice_key);
+        let tx = signed_transfer(&alice_key, bob, 5, 3);
+        let state = state_with_accounts(&[(alice, Account::new(10, 2))]);
+
+        assert_eq!(
+            execute_transfer(&tx, &config(), &state),
+            Err(TransferExecutionError::InvalidNonce {
+                expected: 2,
+                actual: 3,
+            })
+        );
+    }
+
+    #[test]
+    fn reject_transfer_with_insufficient_balance() {
+        let alice_key = SecretKey::new([1; 32]);
+        let bob = Address::new([2; 32]);
+        let alice = address_from_secret_key(&alice_key);
+        let tx = signed_transfer(&alice_key, bob, 11, 0);
+        let state = state_with_accounts(&[(alice, Account::new(10, 0))]);
+
+        assert_eq!(
+            execute_transfer(&tx, &config(), &state),
+            Err(TransferExecutionError::InsufficientBalance {
+                balance: 10,
+                amount: 11,
+            })
+        );
+    }
 }

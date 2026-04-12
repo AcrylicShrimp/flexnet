@@ -18,3 +18,13 @@ impl Display for ChainVersion {
         write!(f, "0x{:04x}", self.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ChainVersion;
+
+    #[test]
+    fn displays_as_fixed_width_hex() {
+        assert_eq!(ChainVersion::new(0x0011).to_string(), "0x0011");
+    }
+}

@@ -4,12 +4,12 @@ use crate::{
     chain_id::ChainId,
     chain_version::ChainVersion,
     hash::{Hash, compute_state_hash},
-    state::{StateTransition, StateView},
+    state::{StateDelta, StateView, WorkingState, WritableState},
     transaction::{TransactionExecutionError, TransactionVerificationError},
 };
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum BlockVerifyError {
     #[error("invalid chain id: expected {expected}, got {actual}")]
     InvalidChainId { expected: ChainId, actual: ChainId },
@@ -29,6 +29,12 @@ pub enum BlockVerifyError {
         index: usize,
         error: TransactionVerificationError,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutionOutcome {
+    pub state_delta: StateDelta,
+    pub state_hash: Hash,
 }
 
 pub fn verify_block_stateless(block: &Block, config: &ChainConfig) -> Result<(), BlockVerifyError> {
@@ -56,10 +62,11 @@ pub fn verify_block_stateless(block: &Block, config: &ChainConfig) -> Result<(),
         }
     }
 
-    if block.transactions.len() > config.max_transactions_per_block {
+    let max_transactions = config.max_transactions_per_block.min(u16::MAX as usize);
+    if block.transactions.len() > max_transactions {
         return Err(BlockVerifyError::TooManyTransactions {
             count: block.transactions.len(),
-            max: config.max_transactions_per_block,
+            max: max_transactions,
         });
     }
 
@@ -72,7 +79,7 @@ pub fn verify_block_stateless(block: &Block, config: &ChainConfig) -> Result<(),
     Ok(())
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum BlockExecuteError {
     #[error("block verification failed: {0}")]
     VerifyError(#[from] BlockVerifyError),
@@ -85,26 +92,26 @@ pub enum BlockExecuteError {
     InvalidStateHash { expected: Hash, actual: Hash },
 }
 
-pub fn execute_block<S, T>(
+pub fn execute_block<S>(
     block: &Block,
     config: &ChainConfig,
-    mut state: S,
-    state_transition: T,
-) -> Result<S, BlockExecuteError>
+    state: &S,
+) -> Result<ExecutionOutcome, BlockExecuteError>
 where
     S: StateView,
-    T: StateTransition,
 {
     verify_block_stateless(block, config)?;
 
+    let mut working_state = WorkingState::new(state);
+
     for (index, transaction) in block.transactions.iter().enumerate() {
         let delta = transaction
-            .execute(config, &state)
+            .execute(config, &working_state)
             .map_err(|error| BlockExecuteError::TxExecuteError { index, error })?;
-        state = state_transition.apply(state, delta);
+        working_state.apply_delta(delta);
     }
 
-    let state_hash = compute_state_hash(&state);
+    let state_hash = compute_state_hash(&working_state);
 
     if block.state_hash != state_hash {
         return Err(BlockExecuteError::InvalidStateHash {
@@ -113,5 +120,157 @@ where
         });
     }
 
-    Ok(state)
+    Ok(ExecutionOutcome {
+        state_delta: working_state.into_delta(),
+        state_hash,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BlockExecuteError, BlockVerifyError, execute_block, verify_block_stateless};
+    use crate::{
+        account::Account,
+        address::Address,
+        block::Block,
+        chain_config::ChainConfig,
+        chain_id::ChainId,
+        chain_version::ChainVersion,
+        crypto::{SecretKey, address_from_secret_key, sign},
+        hash::{Hash, compute_state_hash},
+        state::{State, WritableState},
+        transaction::Transaction,
+        transactions::tx_transfer::{TransferPayload, TxTransfer},
+    };
+    use std::collections::BTreeMap;
+
+    fn secret_key(seed: u8) -> SecretKey {
+        SecretKey::new([seed; 32])
+    }
+
+    fn config() -> ChainConfig {
+        ChainConfig {
+            chain_id: ChainId::new(1),
+            chain_version: ChainVersion::new(1),
+            max_transactions_per_block: 16,
+        }
+    }
+
+    fn state_with_accounts(accounts: &[(Address, Account)]) -> State {
+        State::new(BTreeMap::from_iter(accounts.iter().copied()))
+    }
+
+    fn signed_transfer(
+        secret_key: &SecretKey,
+        to: Address,
+        amount: u128,
+        nonce: u128,
+    ) -> Transaction {
+        let from = address_from_secret_key(secret_key);
+        let payload = TransferPayload::new(
+            ChainId::new(1),
+            ChainVersion::new(1),
+            from,
+            to,
+            amount,
+            nonce,
+        );
+        let mut signing_payload = Vec::with_capacity(payload.signing_payload_len());
+        payload.encode_signing_payload(&mut signing_payload);
+        Transaction::Transfer(TxTransfer::new(payload, sign(secret_key, &signing_payload)))
+    }
+
+    #[test]
+    fn reject_block_when_transaction_count_exceeds_canonical_limit() {
+        let repeated = signed_transfer(
+            &secret_key(1),
+            address_from_secret_key(&secret_key(2)),
+            1,
+            0,
+        );
+        let mut block = Block::new(
+            ChainId::new(1),
+            ChainVersion::new(1),
+            1,
+            Hash::ZERO,
+            Hash::ZERO,
+            Vec::new(),
+        );
+        block.transactions = vec![repeated; u16::MAX as usize + 1];
+
+        assert_eq!(
+            verify_block_stateless(
+                &block,
+                &ChainConfig {
+                    max_transactions_per_block: usize::MAX,
+                    ..config()
+                }
+            ),
+            Err(BlockVerifyError::TooManyTransactions {
+                count: u16::MAX as usize + 1,
+                max: u16::MAX as usize,
+            })
+        );
+    }
+
+    #[test]
+    fn execute_block_returns_delta_for_valid_block() {
+        let alice_key = secret_key(1);
+        let bob_key = secret_key(2);
+        let alice = address_from_secret_key(&alice_key);
+        let bob = address_from_secret_key(&bob_key);
+        let state =
+            state_with_accounts(&[(alice, Account::new(100, 0)), (bob, Account::new(5, 0))]);
+        let tx = signed_transfer(&alice_key, bob, 40, 0);
+        let expected_state = {
+            let mut next = state.clone();
+            let delta = crate::rules::rule_transfer::execute_transfer(
+                match &tx {
+                    Transaction::Transfer(tx) => tx,
+                },
+                &config(),
+                &state,
+            )
+            .unwrap();
+            next.apply_delta(delta);
+            next
+        };
+        let block = Block::new(
+            ChainId::new(1),
+            ChainVersion::new(1),
+            1,
+            Hash::ZERO,
+            compute_state_hash(&expected_state),
+            vec![tx],
+        );
+
+        let outcome = execute_block(&block, &config(), &state).unwrap();
+        let mut next_state = state.clone();
+        next_state.apply_delta(outcome.state_delta);
+
+        assert_eq!(outcome.state_hash, compute_state_hash(&expected_state));
+        assert_eq!(next_state, expected_state);
+    }
+
+    #[test]
+    fn reject_block_when_state_hash_is_wrong() {
+        let alice_key = secret_key(1);
+        let bob = address_from_secret_key(&secret_key(2));
+        let state =
+            state_with_accounts(&[(address_from_secret_key(&alice_key), Account::new(100, 0))]);
+        let tx = signed_transfer(&alice_key, bob, 40, 0);
+        let block = Block::new(
+            ChainId::new(1),
+            ChainVersion::new(1),
+            1,
+            Hash::ZERO,
+            Hash::ZERO,
+            vec![tx],
+        );
+
+        assert!(matches!(
+            execute_block(&block, &config(), &state),
+            Err(BlockExecuteError::InvalidStateHash { .. })
+        ));
+    }
 }

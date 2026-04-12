@@ -10,3 +10,15 @@ impl Address {
         &self.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Address;
+
+    #[test]
+    fn exposes_underlying_bytes() {
+        let address = Address::new([3; 32]);
+
+        assert_eq!(address.as_bytes(), &[3; 32]);
+    }
+}

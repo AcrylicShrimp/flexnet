@@ -16,13 +16,13 @@ pub enum Transaction {
     Transfer(TxTransfer),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum TransactionVerificationError {
     #[error("transfer verification failed: {0}")]
     Transfer(#[from] TransferVerificationError),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum TransactionExecutionError {
     #[error("transfer execution failed: {0}")]
     Transfer(#[from] TransferExecutionError),
@@ -95,5 +95,44 @@ impl Transaction {
         };
 
         Ok(delta)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Transaction;
+    use crate::{
+        address::Address,
+        chain_id::ChainId,
+        chain_version::ChainVersion,
+        crypto::{SecretKey, address_from_secret_key, sign},
+        transaction_kind::TransactionKind,
+        transactions::tx_transfer::{TransferPayload, TxTransfer},
+    };
+
+    #[test]
+    fn transaction_roundtrips_and_reports_kind() {
+        let secret_key = SecretKey::new([1; 32]);
+        let payload = TransferPayload::new(
+            ChainId::new(1),
+            ChainVersion::new(1),
+            address_from_secret_key(&secret_key),
+            Address::new([2; 32]),
+            5,
+            0,
+        );
+        let mut signing_payload = Vec::with_capacity(payload.signing_payload_len());
+        payload.encode_signing_payload(&mut signing_payload);
+        let transaction = Transaction::Transfer(TxTransfer::new(
+            payload,
+            sign(&secret_key, &signing_payload),
+        ));
+        let mut encoded = Vec::with_capacity(transaction.encoded_len());
+        transaction.encode_canonical(&mut encoded);
+
+        let decoded = Transaction::decode_canonical(&encoded).unwrap();
+
+        assert_eq!(decoded, transaction);
+        assert_eq!(decoded.kind(), TransactionKind::Transfer);
     }
 }

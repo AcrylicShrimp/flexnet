@@ -43,3 +43,17 @@ impl TransactionKind {
         TransactionKind::new(kind).ok_or(DecodeError::InvalidInput)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::TransactionKind;
+    use crate::codec::DecodeError;
+
+    #[test]
+    fn reject_unknown_transaction_kind() {
+        assert_eq!(
+            TransactionKind::decode_canonical(&[0xff]),
+            Err(DecodeError::InvalidInput)
+        );
+    }
+}
