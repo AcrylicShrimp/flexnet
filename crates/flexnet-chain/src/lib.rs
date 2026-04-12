@@ -34,7 +34,7 @@ pub use rules::rule_block::{
 pub use rules::rule_transfer::{
     TransferExecutionError, TransferVerificationError, execute_transfer, verify_transfer_stateless,
 };
-pub use state::{State, StateDelta, StateView, WorkingState, WritableState};
+pub use state::{StateDelta, StateView, WorkingState, WritableState};
 pub use transaction::{Transaction, TransactionExecutionError, TransactionVerificationError};
 pub use transaction_kind::TransactionKind;
 pub use transactions::tx_transfer::{TransferPayload, TxTransfer};

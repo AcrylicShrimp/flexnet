@@ -3,10 +3,14 @@
 use std::collections::BTreeMap;
 
 use flexnet_chain::{
-    Account, Address, Block, ChainConfig, ChainId, ChainVersion, Hash, SecretKey, State,
-    Transaction, TransferPayload, TxTransfer, WritableState, address_from_secret_key,
-    compute_state_hash, sign,
+    Account, Address, Block, ChainConfig, ChainId, ChainVersion, Hash, SecretKey, Transaction,
+    TransferPayload, TxTransfer, WritableState, address_from_secret_key, compute_state_hash, sign,
 };
+
+#[path = "memory_state.rs"]
+pub mod memory_state;
+
+pub use memory_state::MemoryState;
 
 pub fn config() -> ChainConfig {
     ChainConfig {
@@ -24,8 +28,8 @@ pub fn address_for(secret_key: &SecretKey) -> Address {
     address_from_secret_key(secret_key)
 }
 
-pub fn state_with_accounts(accounts: &[(Address, Account)]) -> State {
-    State::new(BTreeMap::from_iter(accounts.iter().copied()))
+pub fn state_with_accounts(accounts: &[(Address, Account)]) -> MemoryState {
+    MemoryState::new(BTreeMap::from_iter(accounts.iter().copied()))
 }
 
 pub fn signed_transfer(
@@ -48,11 +52,11 @@ pub fn signed_transfer(
 }
 
 pub fn block_with_transactions(
-    previous_state: &State,
+    previous_state: &MemoryState,
     previous_block_hash: Hash,
     block_height: u128,
     transactions: Vec<Transaction>,
-) -> (Block, State) {
+) -> (Block, MemoryState) {
     let mut next_state = previous_state.clone();
 
     for transaction in &transactions {

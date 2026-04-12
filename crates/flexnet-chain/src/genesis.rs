@@ -56,13 +56,50 @@ mod tests {
         chain_id::ChainId,
         chain_version::ChainVersion,
         hash::{Hash, compute_state_hash},
-        state::State,
+        state::{StateDelta, StateView, WritableState},
     };
     use std::collections::BTreeMap;
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct TestState {
+        accounts: BTreeMap<Address, Account>,
+    }
+
+    impl TestState {
+        fn new(accounts: BTreeMap<Address, Account>) -> Self {
+            let mut state = Self { accounts };
+            state.accounts.retain(|_, account| !account.is_empty());
+            state
+        }
+    }
+
+    impl StateView for TestState {
+        fn all_accounts_in_order(&self) -> impl Iterator<Item = (Address, Account)> {
+            self.accounts
+                .iter()
+                .map(|(address, account)| (*address, *account))
+        }
+
+        fn get_account(&self, address: &Address) -> Account {
+            self.accounts.get(address).copied().unwrap_or_default()
+        }
+    }
+
+    impl WritableState for TestState {
+        fn apply_delta(&mut self, delta: StateDelta) {
+            for (address, account) in delta.into_account_updates() {
+                if account.is_empty() {
+                    self.accounts.remove(&address);
+                } else {
+                    self.accounts.insert(address, account);
+                }
+            }
+        }
+    }
+
     #[test]
     fn genesis_builds_empty_genesis_block_with_state_hash() {
-        let state = State::new(BTreeMap::from([(
+        let state = TestState::new(BTreeMap::from([(
             Address::new([1; 32]),
             Account::new(10, 0),
         )]));

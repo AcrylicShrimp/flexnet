@@ -116,14 +116,51 @@ mod tests {
         crypto::{SecretKey, address_from_secret_key, sign},
         genesis::Genesis,
         hash::{Hash, compute_state_hash},
-        state::{State, StateView},
+        state::{StateDelta, StateView, WritableState},
         transaction::Transaction,
         transactions::tx_transfer::{TransferPayload, TxTransfer},
     };
     use std::collections::BTreeMap;
 
-    fn state_with_accounts(accounts: &[(Address, Account)]) -> State {
-        State::new(BTreeMap::from_iter(accounts.iter().copied()))
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct TestState {
+        accounts: BTreeMap<Address, Account>,
+    }
+
+    impl TestState {
+        fn new(accounts: BTreeMap<Address, Account>) -> Self {
+            let mut state = Self { accounts };
+            state.accounts.retain(|_, account| !account.is_empty());
+            state
+        }
+    }
+
+    impl StateView for TestState {
+        fn all_accounts_in_order(&self) -> impl Iterator<Item = (Address, Account)> {
+            self.accounts
+                .iter()
+                .map(|(address, account)| (*address, *account))
+        }
+
+        fn get_account(&self, address: &Address) -> Account {
+            self.accounts.get(address).copied().unwrap_or_default()
+        }
+    }
+
+    impl WritableState for TestState {
+        fn apply_delta(&mut self, delta: StateDelta) {
+            for (address, account) in delta.into_account_updates() {
+                if account.is_empty() {
+                    self.accounts.remove(&address);
+                } else {
+                    self.accounts.insert(address, account);
+                }
+            }
+        }
+    }
+
+    fn state_with_accounts(accounts: &[(Address, Account)]) -> TestState {
+        TestState::new(BTreeMap::from_iter(accounts.iter().copied()))
     }
 
     fn signed_transfer(

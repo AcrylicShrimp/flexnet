@@ -1,20 +1,21 @@
 #[path = "shared/common.rs"]
 mod common;
 
-use flexnet_chain::{Account, Address, Chain, Genesis, State, StateView};
+use flexnet_chain::{Account, Address, Chain, Genesis, StateView};
 
 use self::common::{
-    address_for, block_with_transactions, config, secret_key, signed_transfer, state_with_accounts,
+    MemoryState, address_for, block_with_transactions, config, secret_key, signed_transfer,
+    state_with_accounts,
 };
 
 fn build_long_scenario_block(
     addresses: &[Address],
-    previous_state: &State,
+    previous_state: &MemoryState,
     previous_block_hash: flexnet_chain::Hash,
     block_height: u128,
     transfers_per_block: usize,
     expected_nonces: &mut [u128],
-) -> (flexnet_chain::Block, State) {
+) -> (flexnet_chain::Block, MemoryState) {
     let mut next_state = previous_state.clone();
     let mut transactions = Vec::with_capacity(transfers_per_block);
 
