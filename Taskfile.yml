@@ -1,0 +1,17 @@
+version: '3'
+
+tasks:
+  format:
+    desc: Format the Rust workspace
+    cmds:
+      - cargo fmt --all
+
+  check:
+    desc: Lint the Rust workspace
+    cmds:
+      - cargo clippy --workspace --all-targets
+
+  build:
+    desc: Build the Rust workspace
+    cmds:
+      - cargo build --workspace
