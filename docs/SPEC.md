@@ -1,181 +1,346 @@
-# Flexnet Specification
+# Flexnet Chain Specification v0
 
-## Overview
+## 1. Overview
 
-This document describes the Flexnet specification.
+This document defines the deterministic chain engine for Flexnet.
 
-## Constants
+The chain engine is responsible for:
 
-- `CURRENT_CHAIN_ID`: a chain id (2 bytes), currently 1
-- `CURRENT_CHAIN_VERSION`: a chain version (2 bytes), currently 1
-- `MAX_TRANSACTIONS_PER_BLOCK`: a maximum number of transactions per block (2 bytes), currently 1024
-- `ADDRESS_LENGTH`: 32 bytes
-- `SIGNATURE_LENGTH`: 64 bytes
-- `HASH_FUNCTION`: sha256
-- `SIGNATURE_SCHEME`: ed25519
+- representing chain state
+- representing blocks and transactions
+- validating transactions
+- applying transactions to state
+- validating blocks
+- applying blocks to state
+- computing canonical hashes for state, transactions, and blocks
 
-## Data Models
+Consensus, networking, peer discovery, and message transport are out of scope.
 
-### Address
+---
 
-- `Address` is the 32-byte Ed25519 public key.
+## 2. Constants
 
-### Account
+The following protocol constants are fixed for this version of the specification:
 
-- `balance`: `u128`
-- `nonce`: `u128`
-- `nonce` is the next expected nonce for outgoing transactions from the account.
+- `CURRENT_CHAIN_ID`: `u16`, currently `1`
+- `CURRENT_CHAIN_VERSION`: `u16`, currently `1`
+- `MAX_TRANSACTIONS_PER_BLOCK`: `u16`, currently `1024`
+- `ADDRESS_LENGTH`: `32` bytes
+- `SIGNATURE_LENGTH`: `64` bytes
+- `HASH_LENGTH`: `32` bytes
+- `HASH_FUNCTION`: `SHA-256`
+- `SIGNATURE_SCHEME`: `Ed25519`
 
-### State
+---
 
-- `State` is a map from `Address` to `Account`.
-- An address not present in the map is treated as an implicit account with:
-  - `balance` = 0
-  - `nonce` = 0
+## 3. Serialization Rules
 
-### Block
+All canonical encodings in this specification follow these rules:
 
-A block is a collection of transactions, represented as:
+- all integer fields are serialized in little-endian
+- all byte array fields are serialized as-is
+- all fields are serialized in the exact order defined by this specification
+- canonical encodings must not include padding, field names, or optional metadata unless explicitly defined
 
-1. `chain_id`: a chain id (2 bytes)
-2. `chain_version`: a chain version (2 bytes)
-3. `block_height`: a height (16 bytes)
-4. `previous_block_hash`: a hash of the previous block (32 bytes)
-5. `state_hash`: a hash of the state after all transactions are executed (32 bytes)
-6. `transactions`: a list of transactions (Transaction[], up to `MAX_TRANSACTIONS_PER_BLOCK` transactions)
+These rules apply to:
 
-- `chain_id` and `chain_version` must be `CURRENT_CHAIN_ID` and `CURRENT_CHAIN_VERSION` respectively
-- if the `block_height` is 0 (genesis block), the `previous_block_hash` must be 0x0000000000000000000000000000000000000000000000000000000000000000
-- if the `block_height` is greater than 0, the `previous_block_hash` must be the hash of the canonical previous block
-- transactions are executed in order, and the result of each transaction is the input of the next transaction
-- if any transaction is invalid, the block is invalid and the transactions are not executed
+- transaction signing payloads
+- transaction canonical encodings
+- transaction hash computation
+- state hash computation
+- block hash computation
 
-The `state_hash` is computed as follows:
+---
 
-1. sort all addresses in the state by their byte representation
-2. filter out addresses with balance = 0 and nonce = 0 (implicit accounts and empty accounts are explicitly excluded)
-3. prepare initial hash value: `hash = 0x0000000000000000000000000000000000000000000000000000000000000000 (32 bytes)`
-4. for each address, compute the hash of the account: `hash = sha256(hash (32 bytes) || address (32 bytes) || balance (16 bytes) || nonce (16 bytes))`
-5. the final hash is the `state_hash`
+## 4. Primitive Types
 
-The `state_hash` must be equal to the state hash after applying all transactions in the block in that order from the state of the canonical previous block.
+### 4.1 Address
 
-A block hash is computed as follows:
+`Address` is the 32-byte Ed25519 public key.
 
-```
-transactions_hash = sha256(number of transactions (2 bytes) || for each transaction: chain_id (2 bytes) || chain_version (2 bytes) || from (32 bytes) || to (32 bytes) || amount (16 bytes) || nonce (16 bytes) || signature (64 bytes) concatenated in order of appearance)
-hash = sha256(chain_id (2 bytes) || chain_version (2 bytes) || block_height (16 bytes) || previous_block_hash (32 bytes) || state_hash (32 bytes) || transactions_hash (32 bytes))
-```
+### 4.2 Signature
 
-- All integer fields are serialized in little-endian.
-- Byte array fields (Address, hashes, signatures) are serialized as-is, in field order.
+`Signature` is a 64-byte Ed25519 signature.
 
-### Initial State
+### 4.3 Hash
 
-The initial state is an ordered map of addresses to accounts.
+`Hash` is a 32-byte SHA-256 digest.
 
-## Operations
+---
 
-### Transfer
+## 5. State Model
 
-A transfer operation is a message that transfers a amount of tokens from one address to another, represented as:
+### 5.1 Account
 
-1. `chain_id`: a chain id (2 bytes)
-2. `chain_version`: a chain version (2 bytes)
-3. `from`: a from address of Address (32 bytes)
-4. `to`: a to address of Address (32 bytes)
-5. `amount`: a amount of tokens (16 bytes)
-6. `nonce`: a nonce (16 bytes)
-7. `signature`: a signature of the transaction of ed25519 (64 bytes)
+An account is defined as:
 
-And this operation works as follows:
+- `balance: u128`
+- `nonce: u128`
 
-```rust
-pub fn verify_transfer(chain_id: u16, chain_version: u16, from: Address, to: Address, amount: u128, nonce: u128, signature: [u8; 64]) -> Result<(), TransferError> {
-  if chain_id != CURRENT_CHAIN_ID {
-    return Err(TransferError::InvalidChainId);
-  }
-  if chain_version != CURRENT_CHAIN_VERSION {
-    return Err(TransferError::InvalidChainVersion);
-  }
+`nonce` is the next expected nonce for outgoing transactions from the account.
 
-  if from == to {
-    return Err(TransferError::UnableToTransferToSelf);
-  }
-  if amount == 0 {
-    return Err(TransferError::InvalidAmount);
-  }
+### 5.2 State
 
-  let from_account = get_account(from);
-  let to_account = get_account(to);
+`State` is a map from `Address` to `Account`.
 
-  if from_account.nonce != nonce {
-    return Err(TransferError::InvalidNonce);
-  }
+If an address is not present in the map, it is treated as an implicit account with:
 
-  if from_account.nonce.checked_add(1).is_none() {
-    return Err(TransferError::NonceOverflow);
-  }
+- `balance = 0`
+- `nonce = 0`
 
-  if from_account.balance.checked_sub(amount).is_none() {
-    return Err(TransferError::InsufficientBalance);
-  }
+Implicit accounts are not stored in the state map unless explicitly materialized by a state transition.
 
-  if to_account.balance.checked_add(amount).is_none() {
-    return Err(TransferError::BalanceOverflow);
-  }
+### 5.3 Empty Accounts
 
-  if verify_signature(chain_id, chain_version, from, to, amount, nonce, signature) != true {
-    return Err(TransferError::InvalidSignature);
-  }
+Accounts with:
 
-  return Ok(());
-}
-```
+- `balance = 0`
+- `nonce = 0`
 
-```rust
-/// No need to call `verify_transfer` in order to call this function; `verify_transfer` is called internally in this function
-pub fn apply_transfer(chain_id: u16, chain_version: u16, from: Address, to: Address, amount: u128, nonce: u128, signature: [u8; 64]) -> Result<StateDelta, TransferError> {
-  verify_transfer(chain_id, chain_version, from, to, amount, nonce, signature)?;
+are considered empty accounts.
 
-  let mut from_account = get_account(from);
-  let mut to_account = get_account(to);
+Empty accounts and implicit accounts are treated equivalently for `state_hash` computation.
 
-  from_account.balance -= amount;
-  from_account.nonce += 1;
-  to_account.balance += amount;
+---
 
-  return StateDelta {
-    accounts: BTreeMap::from_iter([(from, from_account), (to, to_account)]),
-  }
-}
-```
+## 6. State Hash
 
-Notes:
+`state_hash` is a canonical digest of the full current state.
 
-- `from` and `to` must be different addresses
-- `amount` must be greater than 0 (zero amount is not allowed)
-- `get_account` is a function that returns the account of an address; returns empty account (but not saved to the state) if the address is not found (balance = 0, nonce = 0)
-- `checked_sub` and `checked_add` are functions that return `Some(value)` if the operation is successful, `None` if the operation would overflow
-- `verify_signature` is a function that verifies the signature of a transaction; returns true if the signature is valid, false otherwise
-- `StateDelta` overrides the accounts of the state, and the rest of the state is not changed
+It is computed as follows:
 
-### Signature Verification
+1. collect all stored accounts
+2. exclude all accounts whose `balance = 0` and `nonce = 0`
+3. sort remaining accounts by address byte representation in ascending order
+4. initialize:
 
-Signature targets are:
+   `hash = 0x0000000000000000000000000000000000000000000000000000000000000000`
 
-```
-unsigned_payload = chain_id || chain_version || from || to || amount || nonce
-```
+5. for each account in sorted order, update:
 
-- All integer fields are serialized in little-endian.
-- Byte array fields (Address, hashes, signatures) are serialized as-is, in field order.
+   `hash = sha256(hash || address || balance || nonce)`
 
-signature must be a valid Ed25519 signature over the unsigned payload, verified with `from` as the public key.
+6. the final value is the `state_hash`
 
-## Genesis State
+Where:
 
-All node must start with the same genesis state, as represented by the following JSON:
+- `hash` is 32 bytes
+- `address` is 32 bytes
+- `balance` is 16 bytes
+- `nonce` is 16 bytes
+
+---
+
+## 7. Transaction Model
+
+### 7.1 Transaction
+
+A transaction is a chain operation that may be included in a block.
+
+A transaction consists of:
+
+- `kind: u8`
+- `body: operation-specific payload`
+- `authorization: operation-specific authorization data`
+
+The meaning and validation rules of `body` and `authorization` depend on the transaction kind.
+
+Authorization rules are defined per transaction kind, not globally for all transactions.
+
+### 7.2 Transaction Kinds
+
+The following transaction kinds are currently defined:
+
+- `0x01`: `Transfer`
+
+Transaction kind values are part of canonical transaction encoding and must be included in all relevant signing and hashing rules.
+
+---
+
+## 8. Transfer Transaction
+
+### 8.1 Transfer Kind
+
+A `Transfer` transaction has:
+
+- `kind = 0x01`
+- `body = TransferPayload`
+- `authorization = one Ed25519 signature by the address in `from``
+
+### 8.2 TransferPayload
+
+`TransferPayload` consists of:
+
+- `chain_id: u16`
+- `chain_version: u16`
+- `from: Address`
+- `to: Address`
+- `amount: u128`
+- `nonce: u128`
+
+### 8.3 Transfer Authorization
+
+Transfer authorization consists of:
+
+- `signature: Signature`
+
+### 8.4 Transfer Signing Payload
+
+The canonical unsigned payload for a `Transfer` transaction is:
+
+`transaction_kind || chain_id || chain_version || from || to || amount || nonce`
+
+Encoded as:
+
+- `transaction_kind`: 1 byte
+- `chain_id`: 2 bytes
+- `chain_version`: 2 bytes
+- `from`: 32 bytes
+- `to`: 32 bytes
+- `amount`: 16 bytes
+- `nonce`: 16 bytes
+
+Total length: `101` bytes.
+
+The signature must be a valid Ed25519 signature over this exact payload, verified with `from` as the verifying public key.
+
+### 8.5 Canonical Transaction Encoding
+
+The canonical encoding of a `Transfer` transaction is:
+
+`transaction_kind || chain_id || chain_version || from || to || amount || nonce || signature`
+
+Encoded as:
+
+- `transaction_kind`: 1 byte
+- `chain_id`: 2 bytes
+- `chain_version`: 2 bytes
+- `from`: 32 bytes
+- `to`: 32 bytes
+- `amount`: 16 bytes
+- `nonce`: 16 bytes
+- `signature`: 64 bytes
+
+Total length: `165` bytes.
+
+---
+
+## 9. Transfer Validation
+
+A `Transfer` transaction is valid if and only if all of the following conditions hold:
+
+1. `chain_id == CURRENT_CHAIN_ID`
+2. `chain_version == CURRENT_CHAIN_VERSION`
+3. `from != to`
+4. `amount > 0`
+5. the signature is a valid Ed25519 signature by `from` over the canonical transfer signing payload
+6. `from_account.nonce == nonce`
+7. `from_account.nonce + 1` does not overflow `u128`
+8. `from_account.balance - amount` does not underflow `u128`
+9. `to_account.balance + amount` does not overflow `u128`
+
+Where:
+
+- `from_account` is the stored account for `from`, or the implicit empty account if not present
+- `to_account` is the stored account for `to`, or the implicit empty account if not present
+
+---
+
+## 10. Transfer State Transition
+
+Applying a valid `Transfer` transaction produces the following state transition:
+
+- `from.balance = from.balance - amount`
+- `from.nonce = from.nonce + 1`
+- `to.balance = to.balance + amount`
+
+No other state entries are modified.
+
+If `to` was previously implicit, it becomes materialized in state after the transfer.
+
+If any validation rule fails, no state changes are applied.
+
+---
+
+## 11. Transaction Hashing
+
+A block does not hash raw transaction lists directly.
+
+Instead, it first computes a `transactions_hash`:
+
+`transactions_hash = sha256(transaction_count || tx_0 || tx_1 || ... || tx_n)`
+
+Where:
+
+- `transaction_count` is `u16`
+- each `tx_i` is the canonical transaction encoding of the i-th transaction
+- transactions are concatenated in order of appearance in the block
+
+---
+
+## 12. Block Model
+
+A block consists of:
+
+- `chain_id: u16`
+- `chain_version: u16`
+- `block_height: u128`
+- `previous_block_hash: Hash`
+- `state_hash: Hash`
+- `transactions: Vec<Transaction>`
+
+### 12.1 Block Validity Rules
+
+A block is valid if and only if all of the following conditions hold:
+
+1. `chain_id == CURRENT_CHAIN_ID`
+2. `chain_version == CURRENT_CHAIN_VERSION`
+3. `transactions.len() <= MAX_TRANSACTIONS_PER_BLOCK`
+4. if `block_height == 0`, then `previous_block_hash == 0x00..00` (32 zero bytes)
+5. if `block_height > 0`, then `previous_block_hash` equals the canonical hash of the canonical previous block
+6. all transactions are valid when executed sequentially from the previous canonical state
+7. transactions are executed in order
+8. if any transaction is invalid, the block is invalid and no transaction in the block is applied
+9. the block's `state_hash` must equal the `state_hash` of the resulting state after all transactions are applied in order
+
+### 12.2 Block Hash
+
+Block hashing is performed in two steps.
+
+First:
+
+`transactions_hash = sha256(transaction_count || canonical_transaction_0 || canonical_transaction_1 || ... )`
+
+Then:
+
+`block_hash = sha256(chain_id || chain_version || block_height || previous_block_hash || state_hash || transactions_hash)`
+
+Encoded as:
+
+- `chain_id`: 2 bytes
+- `chain_version`: 2 bytes
+- `block_height`: 16 bytes
+- `previous_block_hash`: 32 bytes
+- `state_hash`: 32 bytes
+- `transactions_hash`: 32 bytes
+
+Total preimage length: `116` bytes.
+
+---
+
+## 13. Initial State
+
+The initial state is a protocol-defined ordered map of addresses to accounts.
+
+All nodes must start from the same initial state.
+
+---
+
+## 14. Genesis State
+
+All nodes must be initialized with the same genesis state.
+
+Example:
 
 ```json
 {
@@ -198,15 +363,62 @@ All node must start with the same genesis state, as represented by the following
 }
 ```
 
-### Genesis Block
+---
 
-- A genesis block is a block with:
-  - `chain_id` = `CURRENT_CHAIN_ID`
-  - `chain_version` = `CURRENT_CHAIN_VERSION`
-  - `block_height` = 0
-  - `previous_block_hash` = 0x0000000000000000000000000000000000000000000000000000000000000000
-  - `transactions` = empty list
+## 15. Genesis Block
 
-- The genesis block must assume that the state is initialized by the genesis state
-- The `transactions` MUST be empty
-- The `state_hash` of the genesis block must be the same as the `state_hash` of the genesis state
+The genesis block is defined as:
+
+- `chain_id = CURRENT_CHAIN_ID`
+- `chain_version = CURRENT_CHAIN_VERSION`
+- `block_height = 0`
+- `previous_block_hash = 0x0000000000000000000000000000000000000000000000000000000000000000`
+- `transactions = empty list`
+- `state_hash = state_hash(genesis_state)`
+
+The genesis block assumes that the state before block execution is exactly the genesis state.
+
+The genesis block contains no transactions.
+
+---
+
+## 16. Execution Rules
+
+### 16.1 Transaction Execution
+
+Transactions in a block must be executed strictly in order.
+
+The output state of transaction `i` is the input state of transaction `i + 1`.
+
+### 16.2 Atomic Block Application
+
+Block application is atomic.
+
+If any transaction in a block is invalid, then:
+
+- the block is invalid
+- no transaction in the block is applied
+- the resulting state is unchanged
+
+### 16.3 Canonical Chain State
+
+The canonical chain state at height `H` is defined as:
+
+- the genesis state, followed by
+- sequential application of all canonical blocks from height `0` through height `H`
+
+---
+
+## 17. Out of Scope
+
+The following are out of scope for this specification version:
+
+- consensus protocol
+- peer-to-peer networking
+- mempool policy
+- persistent storage
+- validator set changes
+- minting, burning, and system transactions
+- multisignature authorization
+- time-based operations
+- smart contracts
