@@ -181,6 +181,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexnet-consensus"
+version = "0.1.0"
+dependencies = [
+ "flexnet-chain",
+ "thiserror",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

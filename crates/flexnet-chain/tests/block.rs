@@ -1,12 +1,17 @@
-#[path = "shared/common.rs"]
-mod common;
+mod shared;
 
 use flexnet_chain::{
-    Account, Block, BlockExecuteError, Hash, StateView, compute_block_hash, compute_state_hash,
-    compute_transactions_hash, execute_block,
+    account::Account,
+    block::Block,
+    hash::{Hash, compute_block_hash, compute_state_hash, compute_transactions_hash},
+    rules::{
+        rule_block::{BlockExecuteError, execute_block},
+        rule_transfer::TransferExecutionError,
+    },
+    state::{StateView, WritableState},
+    transaction::TransactionExecutionError,
 };
-
-use self::common::{address_for, secret_key, signed_transfer, state_with_accounts};
+use shared::common::{address_for, config, secret_key, signed_transfer, state_with_accounts};
 
 #[test]
 fn execute_block_matches_expected_hashes_and_state() {
@@ -23,24 +28,24 @@ fn execute_block_matches_expected_hashes_and_state() {
     let tx2 = signed_transfer(&bob_key, carol, 75, 0);
     let expected_state = {
         let mut next = previous_state.clone();
-        let delta1 = tx1.execute(&common::config(), &next).unwrap();
-        flexnet_chain::WritableState::apply_delta(&mut next, delta1);
-        let delta2 = tx2.execute(&common::config(), &next).unwrap();
-        flexnet_chain::WritableState::apply_delta(&mut next, delta2);
+        let delta1 = tx1.execute(&config(), &next).unwrap();
+        WritableState::apply_delta(&mut next, delta1);
+        let delta2 = tx2.execute(&config(), &next).unwrap();
+        WritableState::apply_delta(&mut next, delta2);
         next
     };
     let block = Block::new(
-        common::config().chain_id,
-        common::config().chain_version,
+        config().chain_id,
+        config().chain_version,
         1,
         previous_block_hash,
         compute_state_hash(&expected_state),
         vec![tx1.clone(), tx2.clone()],
     );
 
-    let outcome = execute_block(&block, &common::config(), &previous_state).unwrap();
+    let outcome = execute_block(&block, &config(), &previous_state).unwrap();
     let mut next_state = previous_state.clone();
-    flexnet_chain::WritableState::apply_delta(&mut next_state, outcome.state_delta.clone());
+    WritableState::apply_delta(&mut next_state, outcome.state_delta.clone());
 
     assert_eq!(next_state, expected_state);
     assert_eq!(outcome.state_hash, compute_state_hash(&expected_state));
@@ -64,8 +69,8 @@ fn reject_block_when_any_transaction_is_invalid() {
     let tx1 = signed_transfer(&alice_key, bob, 100, 0);
     let tx2 = signed_transfer(&alice_key, bob, 50, 0);
     let block = Block::new(
-        common::config().chain_id,
-        common::config().chain_version,
+        config().chain_id,
+        config().chain_version,
         1,
         Hash::ZERO,
         Hash::ZERO,
@@ -73,15 +78,13 @@ fn reject_block_when_any_transaction_is_invalid() {
     );
 
     assert_eq!(
-        execute_block(&block, &common::config(), &previous_state),
+        execute_block(&block, &config(), &previous_state),
         Err(BlockExecuteError::TxExecuteError {
             index: 1,
-            error: flexnet_chain::TransactionExecutionError::Transfer(
-                flexnet_chain::TransferExecutionError::InvalidNonce {
-                    expected: 1,
-                    actual: 0,
-                },
-            ),
+            error: TransactionExecutionError::Transfer(TransferExecutionError::InvalidNonce {
+                expected: 1,
+                actual: 0,
+            },),
         })
     );
 }

@@ -1,16 +1,19 @@
-#![allow(dead_code)]
-
-use std::collections::BTreeMap;
-
+use crate::shared::memory_state::MemoryState;
 use flexnet_chain::{
-    Account, Address, Block, ChainConfig, ChainId, ChainVersion, Hash, SecretKey, Transaction,
-    TransferPayload, TxTransfer, WritableState, address_from_secret_key, compute_state_hash, sign,
+    account::Account,
+    address::Address,
+    block::Block,
+    chain_config::ChainConfig,
+    chain_id::ChainId,
+    chain_version::ChainVersion,
+    crypto::address_from_secret_key,
+    crypto::{SecretKey, sign},
+    hash::{Hash, compute_state_hash},
+    state::WritableState,
+    transaction::Transaction,
+    transactions::tx_transfer::{TransferPayload, TxTransfer},
 };
-
-#[path = "memory_state.rs"]
-pub mod memory_state;
-
-pub use memory_state::MemoryState;
+use std::collections::BTreeMap;
 
 pub fn config() -> ChainConfig {
     ChainConfig {

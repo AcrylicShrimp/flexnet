@@ -1,6 +1,9 @@
+use flexnet_chain::{
+    account::Account,
+    address::Address,
+    state::{StateDelta, StateView, WritableState},
+};
 use std::collections::BTreeMap;
-
-use flexnet_chain::{Account, Address, StateDelta, StateView, WritableState};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct MemoryState {

@@ -1,4 +1,5 @@
 use crate::{
+    address::Address,
     block::Block,
     chain_config::ChainConfig,
     genesis::Genesis,
@@ -15,6 +16,7 @@ where
 {
     config: ChainConfig,
     state: S,
+    validators: Vec<Address>,
     tip_block: Block,
     tip_block_hash: Hash,
 }
@@ -36,12 +38,13 @@ where
     S: WritableState,
 {
     pub fn new(genesis: Genesis<S>) -> Self {
-        let (config, state, tip_block) = genesis.into_genesis_block();
+        let (config, state, validators, tip_block) = genesis.into_genesis_block();
         let tip_block_hash = compute_block_hash(&tip_block);
 
         Self {
             config,
             state,
+            validators,
             tip_block,
             tip_block_hash,
         }
@@ -53,6 +56,10 @@ where
 
     pub fn state(&self) -> &S {
         &self.state
+    }
+
+    pub fn validators(&self) -> &[Address] {
+        &self.validators
     }
 
     pub fn tip_block(&self) -> &Block {
@@ -199,6 +206,7 @@ mod tests {
         let mut chain = Chain::new(Genesis::new(
             config(),
             state_with_accounts(&[(alice, Account::new(100, 0)), (bob, Account::new(0, 0))]),
+            vec![],
         ));
         let tx = signed_transfer(&alice_key, bob, 40, 0);
         let next_state =
@@ -227,6 +235,7 @@ mod tests {
         let mut chain = Chain::new(Genesis::new(
             config(),
             state_with_accounts(&[(alice, Account::new(100, 0))]),
+            vec![],
         ));
         let before = chain.clone();
         let block = Block::new(

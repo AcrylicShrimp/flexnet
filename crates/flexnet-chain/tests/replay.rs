@@ -1,21 +1,30 @@
-#[path = "shared/common.rs"]
-mod common;
+mod shared;
 
-use flexnet_chain::{Account, Address, Chain, Genesis, StateView};
-
-use self::common::{
-    MemoryState, address_for, block_with_transactions, config, secret_key, signed_transfer,
-    state_with_accounts,
+use flexnet_chain::{
+    account::Account,
+    address::Address,
+    block::Block,
+    chain::Chain,
+    genesis::Genesis,
+    hash::{Hash, compute_state_hash},
+    state::{StateView, WritableState},
+};
+use shared::{
+    common::{
+        address_for, block_with_transactions, config, secret_key, signed_transfer,
+        state_with_accounts,
+    },
+    memory_state::MemoryState,
 };
 
 fn build_long_scenario_block(
     addresses: &[Address],
     previous_state: &MemoryState,
-    previous_block_hash: flexnet_chain::Hash,
+    previous_block_hash: Hash,
     block_height: u128,
     transfers_per_block: usize,
     expected_nonces: &mut [u128],
-) -> (flexnet_chain::Block, MemoryState) {
+) -> (Block, MemoryState) {
     let mut next_state = previous_state.clone();
     let mut transactions = Vec::with_capacity(transfers_per_block);
 
@@ -35,7 +44,7 @@ fn build_long_scenario_block(
         let transfer = signed_transfer(&secret_key((from_index + 1) as u8), to, amount, nonce);
         let delta = transfer.execute(&config(), &next_state).unwrap();
 
-        flexnet_chain::WritableState::apply_delta(&mut next_state, delta);
+        WritableState::apply_delta(&mut next_state, delta);
         expected_nonces[from_index] += 1;
         transactions.push(transfer);
     }
@@ -65,7 +74,7 @@ fn replay_long_multi_transaction_multi_block_scenario_across_independent_chains(
         .copied()
         .map(|address| (address, Account::new(INITIAL_BALANCE, 0)))
         .collect::<Vec<_>>();
-    let genesis = Genesis::new(config(), state_with_accounts(&genesis_accounts));
+    let genesis = Genesis::new(config(), state_with_accounts(&genesis_accounts), vec![]);
     let mut chains = (0..NODE_COUNT)
         .map(|_| Chain::new(genesis.clone()))
         .collect::<Vec<_>>();
@@ -88,8 +97,8 @@ fn replay_long_multi_transaction_multi_block_scenario_across_independent_chains(
             chain.append_block(block.clone()).unwrap();
             assert_eq!(chain.tip_height(), expected_height);
             assert_eq!(
-                flexnet_chain::compute_state_hash(chain.state()),
-                flexnet_chain::compute_state_hash(&expected_state)
+                compute_state_hash(chain.state()),
+                compute_state_hash(&expected_state)
             );
         }
     }
@@ -116,8 +125,8 @@ fn replay_long_multi_transaction_multi_block_scenario_across_independent_chains(
         assert_eq!(chain.tip_height(), reference.tip_height());
         assert_eq!(chain.tip_block_hash(), reference.tip_block_hash());
         assert_eq!(
-            flexnet_chain::compute_state_hash(chain.state()),
-            flexnet_chain::compute_state_hash(reference.state())
+            compute_state_hash(chain.state()),
+            compute_state_hash(reference.state())
         );
         assert_eq!(chain.state(), reference.state());
     }

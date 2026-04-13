@@ -1,0 +1,44 @@
+use flexnet_chain::{address::Address, hash::Hash};
+
+pub enum StateOutput<P> {
+    StartTimeout {
+        height: u128,
+        round: u32,
+        timeout_ms: u64,
+    },
+    StartRound {
+        height: u128,
+        round: u32,
+    },
+    Propose {
+        height: u128,
+        round: u32,
+        address: Address,
+    },
+    Prevote {
+        height: u128,
+        round: u32,
+        proposal_hash: Option<Hash>,
+    },
+    Precommit {
+        height: u128,
+        round: u32,
+        proposal_hash: Option<Hash>,
+    },
+    Commit {
+        height: u128,
+        round: u32,
+        proposal: P,
+    },
+    RoundFailure {
+        height: u128,
+        round: u32,
+        reason: RoundFailureReason,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RoundFailureReason {
+    Timeout,
+    Conflict,
+}

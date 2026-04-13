@@ -1,4 +1,5 @@
 use crate::{
+    address::Address,
     block::Block,
     chain_config::ChainConfig,
     hash::{Hash, compute_state_hash},
@@ -12,16 +13,18 @@ where
 {
     pub config: ChainConfig,
     pub initial_state: S,
+    pub validators: Vec<Address>,
 }
 
 impl<S> Genesis<S>
 where
     S: StateView,
 {
-    pub fn new(config: ChainConfig, initial_state: S) -> Self {
+    pub fn new(config: ChainConfig, initial_state: S, validators: Vec<Address>) -> Self {
         Self {
             config,
             initial_state,
+            validators,
         }
     }
 
@@ -40,9 +43,9 @@ where
         )
     }
 
-    pub fn into_genesis_block(self) -> (ChainConfig, S, Block) {
+    pub fn into_genesis_block(self) -> (ChainConfig, S, Vec<Address>, Block) {
         let block = self.block();
-        (self.config, self.initial_state, block)
+        (self.config, self.initial_state, self.validators, block)
     }
 }
 
@@ -110,6 +113,7 @@ mod tests {
                 max_transactions_per_block: 16,
             },
             state.clone(),
+            vec![],
         );
         let block = genesis.block();
 

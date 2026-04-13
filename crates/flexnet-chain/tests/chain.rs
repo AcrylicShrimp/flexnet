@@ -1,9 +1,15 @@
-#[path = "shared/common.rs"]
-mod common;
+mod shared;
 
-use flexnet_chain::{Account, Block, Chain, ChainAppendError, Genesis, Hash, StateView};
-
-use self::common::{
+use flexnet_chain::{
+    account::Account,
+    block::Block,
+    chain::{Chain, ChainAppendError},
+    genesis::Genesis,
+    hash::{Hash, compute_block_hash},
+    rules::rule_block::BlockExecuteError,
+    state::StateView,
+};
+use shared::common::{
     address_for, block_with_transactions, config, secret_key, signed_transfer, state_with_accounts,
 };
 
@@ -18,14 +24,12 @@ fn initialize_chain_from_genesis_and_append_blocks() {
     let genesis = Genesis::new(
         config(),
         state_with_accounts(&[(alice, Account::new(1_000, 0)), (bob, Account::new(250, 0))]),
+        vec![],
     );
     let mut chain = Chain::new(genesis.clone());
 
     assert_eq!(chain.tip_height(), 0);
-    assert_eq!(
-        chain.tip_block_hash(),
-        flexnet_chain::compute_block_hash(&genesis.block())
-    );
+    assert_eq!(chain.tip_block_hash(), compute_block_hash(&genesis.block()));
     assert_eq!(chain.tip_block(), &genesis.block());
 
     let tx1 = signed_transfer(&alice_key, bob, 150, 0);
@@ -67,6 +71,7 @@ fn reject_out_of_sequence_block_height_without_mutating_chain() {
     let mut chain = Chain::new(Genesis::new(
         config(),
         state_with_accounts(&[(alice, Account::new(1_000, 0))]),
+        vec![],
     ));
     let before = chain.clone();
     let tx = signed_transfer(&alice_key, bob, 100, 0);
@@ -93,6 +98,7 @@ fn reject_invalid_block_without_mutating_chain() {
     let mut chain = Chain::new(Genesis::new(
         config(),
         state_with_accounts(&[(alice, Account::new(1_000, 0))]),
+        vec![],
     ));
     let before = chain.clone();
     let tx = signed_transfer(&alice_key, bob, 100, 0);
@@ -108,9 +114,7 @@ fn reject_invalid_block_without_mutating_chain() {
 
     assert!(matches!(
         error,
-        ChainAppendError::BlockExecutionError(
-            flexnet_chain::BlockExecuteError::InvalidStateHash { .. }
-        )
+        ChainAppendError::BlockExecutionError(BlockExecuteError::InvalidStateHash { .. })
     ));
     assert_eq!(chain, before);
 }
@@ -122,6 +126,7 @@ fn reject_previous_hash_mismatch_without_mutating_chain() {
     let mut chain = Chain::new(Genesis::new(
         config(),
         state_with_accounts(&[(alice, Account::new(1_000, 0))]),
+        vec![],
     ));
     let before = chain.clone();
     let block = Block::new(

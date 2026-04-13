@@ -1,12 +1,16 @@
-#[path = "shared/common.rs"]
-mod common;
+mod shared;
 
 use flexnet_chain::{
-    Account, StateView, Transaction, TransferExecutionError, TransferPayload,
-    TransferVerificationError, TxTransfer, execute_transfer, verify_transfer_stateless,
+    account::Account,
+    rules::rule_transfer::{
+        TransferExecutionError, TransferVerificationError, execute_transfer,
+        verify_transfer_stateless,
+    },
+    state::{StateView, WritableState},
+    transaction::Transaction,
+    transactions::tx_transfer::{TransferPayload, TxTransfer},
 };
-
-use self::common::{address_for, secret_key, signed_transfer, state_with_accounts};
+use shared::common::{address_for, config, secret_key, signed_transfer, state_with_accounts};
 
 #[test]
 fn apply_valid_transfer_updates_balances_and_nonce() {
@@ -18,10 +22,10 @@ fn apply_valid_transfer_updates_balances_and_nonce() {
     let tx = signed_transfer(&alice_key, bob, 250, 0);
 
     let delta = match &tx {
-        Transaction::Transfer(tx) => execute_transfer(tx, &common::config(), &state).unwrap(),
+        Transaction::Transfer(tx) => execute_transfer(tx, &config(), &state).unwrap(),
     };
     let mut next_state = state.clone();
-    flexnet_chain::WritableState::apply_delta(&mut next_state, delta);
+    WritableState::apply_delta(&mut next_state, delta);
 
     assert_eq!(next_state.get_account(&alice), Account::new(750, 1));
     assert_eq!(next_state.get_account(&bob), Account::new(255, 0));
@@ -47,7 +51,7 @@ fn reject_transfer_with_invalid_signature() {
 
     assert!(matches!(
         match &tampered {
-            Transaction::Transfer(tx) => verify_transfer_stateless(tx, &common::config()),
+            Transaction::Transfer(tx) => verify_transfer_stateless(tx, &config()),
         },
         Err(TransferVerificationError::InvalidSignature(_))
     ));
@@ -65,7 +69,7 @@ fn reject_transfer_with_wrong_nonce() {
 
     assert_eq!(
         match &tx {
-            Transaction::Transfer(tx) => execute_transfer(tx, &common::config(), &state),
+            Transaction::Transfer(tx) => execute_transfer(tx, &config(), &state),
         },
         Err(TransferExecutionError::InvalidNonce {
             expected: 4,
