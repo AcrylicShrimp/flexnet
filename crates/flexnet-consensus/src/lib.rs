@@ -1,4 +1,5 @@
 pub mod consensus_config;
+pub mod lock;
 pub mod proposal;
 pub mod proposal_validator;
 pub mod state;

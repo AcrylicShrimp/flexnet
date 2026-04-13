@@ -1,5 +1,6 @@
 use crate::{
     consensus_config::ConsensusConfig,
+    lock::Lock,
     proposal::Proposal,
     proposal_validator::ProposalValidator,
     state::State,
@@ -19,6 +20,7 @@ where
     height: u128,
     round: u32,
     state: State<P>,
+    lock: Option<Lock>, // lock persists across rounds within the same height
     proposal_validator: V,
     _phantom: PhantomData<P>,
 }
@@ -57,6 +59,7 @@ where
                 prevote_set: VoteSet::new(),
                 precommit_set: VoteSet::new(),
             },
+            lock: None,
             proposal_validator,
             _phantom: PhantomData,
         })
@@ -69,6 +72,9 @@ where
                     // height is behind or the same; ignore input
                     return vec![];
                 }
+
+                // a new height starts; clear the lock
+                self.lock = None;
 
                 vec![StateOutput::StartRound { height, round: 0 }]
             }
@@ -137,7 +143,7 @@ where
                             .proposal_validator
                             .validate(height, round, &proposal, &self.config)
                         {
-                            // bad proposal; vote nil
+                            // bad proposal; prevote nil
                             self.state = State::Prevote {
                                 proposal: None,
                                 prevote: None,
@@ -151,19 +157,52 @@ where
                             }];
                         }
 
-                        // good proposal; vote for it
                         let proposal_hash = proposal.hash();
-                        self.state = State::Prevote {
-                            proposal: Some(proposal),
-                            prevote: Some(proposal_hash),
-                            prevote_set: std::mem::take(prevote_set),
-                            precommit_set: std::mem::take(precommit_set),
-                        };
-                        vec![StateOutput::Prevote {
-                            height,
-                            round,
-                            proposal_hash: Some(proposal_hash),
-                        }]
+
+                        match &self.lock {
+                            Some(lock) if proposal_hash == lock.proposal_hash => {
+                                // good proposal with the same lock; prevote for it
+                                self.state = State::Prevote {
+                                    proposal: Some(proposal),
+                                    prevote: Some(proposal_hash),
+                                    prevote_set: std::mem::take(prevote_set),
+                                    precommit_set: std::mem::take(precommit_set),
+                                };
+                                vec![StateOutput::Prevote {
+                                    height,
+                                    round,
+                                    proposal_hash: Some(proposal_hash),
+                                }]
+                            }
+                            Some(_) => {
+                                // good proposal with a different lock; prevote nil
+                                self.state = State::Prevote {
+                                    proposal: None, // invalidate proposal
+                                    prevote: None,
+                                    prevote_set: std::mem::take(prevote_set),
+                                    precommit_set: std::mem::take(precommit_set),
+                                };
+                                vec![StateOutput::Prevote {
+                                    height,
+                                    round,
+                                    proposal_hash: None,
+                                }]
+                            }
+                            None => {
+                                // good proposal without previous lock; prevote for it
+                                self.state = State::Prevote {
+                                    proposal: Some(proposal),
+                                    prevote: Some(proposal_hash),
+                                    prevote_set: std::mem::take(prevote_set),
+                                    precommit_set: std::mem::take(precommit_set),
+                                };
+                                vec![StateOutput::Prevote {
+                                    height,
+                                    round,
+                                    proposal_hash: Some(proposal_hash),
+                                }]
+                            }
+                        }
                     }
                     _ => {
                         // already provoted; do not prevote again
@@ -202,23 +241,18 @@ where
                         // first collect prevotes
                         prevote_set.add_vote(address, proposal_hash);
 
-                        match prevote_set.any_quorum_satisfied(self.config.quorum) {
-                            Some(quorum_hash) if &quorum_hash == prevote => {
-                                // happy path: prevote is the same as the quorum hash
-                                self.state = State::Precommit {
-                                    proposal: std::mem::take(proposal),
-                                    prevote: std::mem::take(prevote),
-                                    precommit: quorum_hash,
-                                    precommit_set: std::mem::take(precommit_set),
-                                };
-                                vec![StateOutput::Precommit {
-                                    height,
-                                    round,
-                                    proposal_hash: quorum_hash,
-                                }]
+                        let quorum_hash = match prevote_set.any_quorum_satisfied(self.config.quorum)
+                        {
+                            Some(hash) => hash,
+                            None => {
+                                // no quorum yet; wait for more prevotes
+                                return vec![];
                             }
-                            Some(_) => {
-                                // conflict: prevote is not the same as the quorum hash
+                        };
+
+                        match (prevote, &quorum_hash) {
+                            (prevote, quorum_hash) if prevote != quorum_hash => {
+                                // conflict: prevote and quorum hash are different
                                 // give up on this round and precommit for nil
                                 self.state = State::Precommit {
                                     proposal: None, // invalidate proposal
@@ -232,9 +266,45 @@ where
                                     proposal_hash: None,
                                 }]
                             }
-                            None => {
-                                // no quorum yet; wait for more prevotes
-                                vec![]
+                            (Some(prevote), Some(quorum_hash)) => {
+                                // happy path: prevote and quorum hash are the same
+                                // lock for the proposal (if no prior lock exists) and precommit for the quorum hash
+                                if self.lock.is_none() {
+                                    self.lock = Some(Lock {
+                                        round: self.round,
+                                        proposal_hash: *quorum_hash,
+                                    });
+                                }
+
+                                self.state = State::Precommit {
+                                    proposal: std::mem::take(proposal),
+                                    prevote: Some(*prevote),
+                                    precommit: Some(*quorum_hash),
+                                    precommit_set: std::mem::take(precommit_set),
+                                };
+                                vec![StateOutput::Precommit {
+                                    height,
+                                    round,
+                                    proposal_hash: Some(*quorum_hash),
+                                }]
+                            }
+                            (None, None) => {
+                                // happy path for nil: prevote and quorum hash are both nil
+                                // give up on this round and precommit for nil
+                                self.state = State::Precommit {
+                                    proposal: None, // invalidate proposal
+                                    prevote: None,
+                                    precommit: None,
+                                    precommit_set: std::mem::take(precommit_set),
+                                };
+                                vec![StateOutput::Precommit {
+                                    height,
+                                    round,
+                                    proposal_hash: None,
+                                }]
+                            }
+                            (_, _) => {
+                                unreachable!();
                             }
                         }
                     }
