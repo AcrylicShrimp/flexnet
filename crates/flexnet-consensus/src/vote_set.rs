@@ -1,10 +1,11 @@
-use flexnet_chain::{address::Address, hash::Hash};
+use crate::justification::Evidence;
+use flexnet_chain::{address::Address, crypto::Signature, hash::Hash};
 use std::collections::{BTreeMap, btree_map::Entry};
 
 #[derive(Default, Debug, Clone, Hash)]
 pub struct VoteSet {
     pub votes: BTreeMap<Address, Option<Hash>>,
-    pub counts: BTreeMap<Option<Hash>, usize>,
+    pub evidences: BTreeMap<Option<Hash>, Vec<Evidence>>,
 }
 
 impl VoteSet {
@@ -12,7 +13,7 @@ impl VoteSet {
         Default::default()
     }
 
-    pub fn add_vote(&mut self, address: Address, hash: Option<Hash>) {
+    pub fn add_vote(&mut self, address: Address, hash: Option<Hash>, signature: Signature) {
         let entry = match self.votes.entry(address) {
             Entry::Vacant(entry) => entry,
             Entry::Occupied(_) => {
@@ -22,16 +23,16 @@ impl VoteSet {
 
         entry.insert(hash);
 
-        self.counts
+        self.evidences
             .entry(hash)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
+            .and_modify(|evidences| evidences.push(Evidence { address, signature }))
+            .or_insert(vec![Evidence { address, signature }]);
     }
 
-    pub fn any_quorum_satisfied(&self, quorum: usize) -> Option<Option<Hash>> {
-        self.counts
+    pub fn any_quorum_satisfied(&self, quorum: usize) -> Option<(Option<Hash>, Vec<Evidence>)> {
+        self.evidences
             .iter()
-            .find(|(_, count)| **count >= quorum)
-            .map(|(hash, _)| *hash)
+            .find(|(_, evidences)| evidences.len() >= quorum)
+            .map(|(hash, evidences)| (*hash, evidences.clone()))
     }
 }

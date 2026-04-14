@@ -1,6 +1,8 @@
 use crate::{
     consensus_config::ConsensusConfig,
+    justification::Justification,
     lock::Lock,
+    polka::Polka,
     proposal::Proposal,
     proposal_validator::ProposalValidator,
     state::State,
@@ -20,7 +22,8 @@ where
     height: u128,
     round: u32,
     state: State<P>,
-    lock: Option<Lock>, // lock persists across rounds within the same height
+    lock: Option<Lock>,      // lock persists across rounds within the same height
+    polka: Option<Polka<P>>, // next candidate proposal with enough justification
     proposal_validator: V,
     _phantom: PhantomData<P>,
 }
@@ -60,6 +63,7 @@ where
                 precommit_set: VoteSet::new(),
             },
             lock: None,
+            polka: None,
             proposal_validator,
             _phantom: PhantomData,
         })
@@ -73,8 +77,9 @@ where
                     return vec![];
                 }
 
-                // a new height starts; clear the lock
+                // a new height starts; clear the lock and polka
                 self.lock = None;
+                self.polka = None;
 
                 vec![StateOutput::StartRound { height, round: 0 }]
             }
@@ -112,10 +117,17 @@ where
                         round: self.round,
                         timeout_ms: self.config.round_timeout_ms,
                     },
-                    StateOutput::Propose {
-                        height: self.height,
-                        round: self.round,
-                        address: self.config.address,
+                    match &self.polka {
+                        Some(polka) => StateOutput::ProposePolka {
+                            height: self.height,
+                            round: self.round,
+                            polka: polka.clone(),
+                        },
+                        None => StateOutput::Propose {
+                            height: self.height,
+                            round: self.round,
+                            address: self.config.address,
+                        },
                     },
                 ]
             }
@@ -123,6 +135,7 @@ where
                 height,
                 round,
                 proposal,
+                justification,
             } => {
                 if (height, round) < (self.height, self.round) {
                     // proposal is behind the current round; ignore input
@@ -174,22 +187,80 @@ where
                                     proposal_hash: Some(proposal_hash),
                                 }]
                             }
-                            Some(_) => {
-                                // good proposal with a different lock; prevote nil
-                                self.state = State::Prevote {
-                                    proposal: None, // invalidate proposal
-                                    prevote: None,
-                                    prevote_set: std::mem::take(prevote_set),
-                                    precommit_set: std::mem::take(precommit_set),
-                                };
-                                vec![StateOutput::Prevote {
-                                    height,
-                                    round,
-                                    proposal_hash: None,
-                                }]
+                            Some(lock) => {
+                                let unlocked =
+                                    justification.as_ref().is_some_and(|justification| {
+                                        justification.height == height
+                                            && justification.round < round
+                                            && justification.evidences.len() >= self.config.quorum
+                                            && lock.round < justification.round
+                                    });
+
+                                if unlocked {
+                                    // good proposal with a valid justification; prevote for it
+                                    // make the proposal the polka
+                                    if let Some(justification) = &justification {
+                                        self.polka = Some(Polka {
+                                            proposal: proposal.clone(),
+                                            proposal_hash,
+                                            justification: justification.clone(),
+                                        });
+                                    }
+
+                                    self.state = State::Prevote {
+                                        proposal: Some(proposal),
+                                        prevote: Some(proposal_hash),
+                                        prevote_set: std::mem::take(prevote_set),
+                                        precommit_set: std::mem::take(precommit_set),
+                                    };
+                                    vec![StateOutput::Prevote {
+                                        height,
+                                        round,
+                                        proposal_hash: Some(proposal_hash),
+                                    }]
+                                } else {
+                                    // good proposal with a different lock; prevote nil
+                                    self.state = State::Prevote {
+                                        proposal: None, // invalidate proposal
+                                        prevote: None,
+                                        prevote_set: std::mem::take(prevote_set),
+                                        precommit_set: std::mem::take(precommit_set),
+                                    };
+                                    vec![StateOutput::Prevote {
+                                        height,
+                                        round,
+                                        proposal_hash: None,
+                                    }]
+                                }
                             }
                             None => {
                                 // good proposal without previous lock; prevote for it
+                                // replace polka if justifications are better
+                                match (&self.polka, &justification) {
+                                    (Some(polka), Some(justification))
+                                        if justification.height == height
+                                            && polka.justification.round < justification.round
+                                            && polka.justification.evidences.len()
+                                                <= justification.evidences.len() =>
+                                    {
+                                        // better justification; replace polka
+                                        self.polka = Some(Polka {
+                                            proposal: proposal.clone(),
+                                            proposal_hash,
+                                            justification: justification.clone(),
+                                        });
+                                    }
+                                    (None, Some(justification)) => {
+                                        // no polka yet; create one
+                                        self.polka = Some(Polka {
+                                            proposal: proposal.clone(),
+                                            proposal_hash,
+                                            justification: justification.clone(),
+                                        });
+                                    }
+                                    _ => {}
+                                }
+
                                 self.state = State::Prevote {
                                     proposal: Some(proposal),
                                     prevote: Some(proposal_hash),
@@ -215,6 +286,7 @@ where
                 round,
                 address,
                 proposal_hash,
+                signature,
             } => {
                 if (height, round) < (self.height, self.round) {
                     // prevote is behind the current round; ignore input
@@ -229,7 +301,7 @@ where
                 match &mut self.state {
                     State::Propose { prevote_set, .. } => {
                         // proposal not yet received; just collect prevotes
-                        prevote_set.add_vote(address, proposal_hash);
+                        prevote_set.add_vote(address, proposal_hash, signature);
                         vec![]
                     }
                     State::Prevote {
@@ -239,16 +311,16 @@ where
                         precommit_set,
                     } => {
                         // first collect prevotes
-                        prevote_set.add_vote(address, proposal_hash);
+                        prevote_set.add_vote(address, proposal_hash, signature);
 
-                        let quorum_hash = match prevote_set.any_quorum_satisfied(self.config.quorum)
-                        {
-                            Some(hash) => hash,
-                            None => {
-                                // no quorum yet; wait for more prevotes
-                                return vec![];
-                            }
-                        };
+                        let (quorum_hash, evidences) =
+                            match prevote_set.any_quorum_satisfied(self.config.quorum) {
+                                Some(entry) => entry,
+                                None => {
+                                    // no quorum yet; wait for more prevotes
+                                    return vec![];
+                                }
+                            };
 
                         match (prevote, &quorum_hash) {
                             (prevote, quorum_hash) if prevote != quorum_hash => {
@@ -268,11 +340,34 @@ where
                             }
                             (Some(prevote), Some(quorum_hash)) => {
                                 // happy path: prevote and quorum hash are the same
-                                // lock for the proposal (if no prior lock exists) and precommit for the quorum hash
-                                if self.lock.is_none() {
-                                    self.lock = Some(Lock {
-                                        round: self.round,
+                                // create or update the lock for the proposal and precommit for the quorum hash
+                                match &mut self.lock {
+                                    Some(lock) if lock.round < round => {
+                                        // new lock is better than the existing lock; replace it
+                                        self.lock = Some(Lock {
+                                            round: self.round,
+                                            proposal_hash: *quorum_hash,
+                                        });
+                                    }
+                                    None => {
+                                        self.lock = Some(Lock {
+                                            round: self.round,
+                                            proposal_hash: *quorum_hash,
+                                        });
+                                    }
+                                    _ => {}
+                                }
+
+                                if let Some(proposal) = proposal.as_ref() {
+                                    // polka for the proposal
+                                    self.polka = Some(Polka {
+                                        proposal: proposal.clone(),
                                         proposal_hash: *quorum_hash,
+                                        justification: Justification {
+                                            height,
+                                            round,
+                                            evidences,
+                                        },
                                     });
                                 }
 
@@ -319,6 +414,7 @@ where
                 round,
                 address,
                 proposal_hash,
+                signature,
             } => {
                 if (height, round) < (self.height, self.round) {
                     // precommit is behind the current round; ignore input
@@ -331,21 +427,14 @@ where
                 }
 
                 match &mut self.state {
-                    State::Propose {
-                        prevote_set,
-                        precommit_set,
-                    } => {
+                    State::Propose { precommit_set, .. } => {
                         // proposal not yet received; just collect precommits
-                        precommit_set.add_vote(address, proposal_hash);
-                        self.state = State::Propose {
-                            prevote_set: std::mem::take(prevote_set),
-                            precommit_set: std::mem::take(precommit_set),
-                        };
+                        precommit_set.add_vote(address, proposal_hash, signature);
                         vec![]
                     }
                     State::Prevote { precommit_set, .. } => {
                         // prevote quorum not yet satisfied; just collect precommits
-                        precommit_set.add_vote(address, proposal_hash);
+                        precommit_set.add_vote(address, proposal_hash, signature);
                         vec![]
                     }
                     State::Precommit {
@@ -355,10 +444,10 @@ where
                         ..
                     } => {
                         // first collect precommits
-                        precommit_set.add_vote(address, proposal_hash);
+                        precommit_set.add_vote(address, proposal_hash, signature);
 
                         match precommit_set.any_quorum_satisfied(self.config.quorum) {
-                            Some(quorum_hash) if &quorum_hash == precommit => {
+                            Some((quorum_hash, _)) if &quorum_hash == precommit => {
                                 match proposal.take() {
                                     Some(proposal) => {
                                         // happy path: proposal is valid and precommit is the same as the quorum hash
@@ -375,7 +464,7 @@ where
                                         vec![StateOutput::RoundFailure {
                                             height: self.height,
                                             round: self.round,
-                                            reason: RoundFailureReason::Conflict,
+                                            reason: RoundFailureReason::NoDecision,
                                         }]
                                     }
                                 }
@@ -387,7 +476,7 @@ where
                                 vec![StateOutput::RoundFailure {
                                     height: self.height,
                                     round: self.round,
-                                    reason: RoundFailureReason::Conflict,
+                                    reason: RoundFailureReason::NoDecision,
                                 }]
                             }
                             None => {

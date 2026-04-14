@@ -1,3 +1,4 @@
+use crate::polka::Polka;
 use flexnet_chain::{address::Address, hash::Hash};
 
 pub enum StateOutput<P> {
@@ -14,6 +15,11 @@ pub enum StateOutput<P> {
         height: u128,
         round: u32,
         address: Address,
+    },
+    ProposePolka {
+        height: u128,
+        round: u32,
+        polka: Polka<P>,
     },
     Prevote {
         height: u128,
@@ -40,5 +46,5 @@ pub enum StateOutput<P> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RoundFailureReason {
     Timeout,
-    Conflict,
+    NoDecision,
 }
