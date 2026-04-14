@@ -14,7 +14,7 @@ use crate::{
     state_output::{RoundFailureReason, StateOutput},
     vote_set::VoteSet,
 };
-use std::marker::PhantomData;
+use flexnet_chain::address::Address;
 use thiserror::Error;
 
 pub struct StateMachine<P, V>
@@ -29,7 +29,6 @@ where
     lock: Option<Lock>,      // lock persists across rounds within the same height
     polka: Option<Polka<P>>, // next candidate proposal with enough justification
     proposal_validator: V,
-    _phantom: PhantomData<P>,
 }
 
 #[derive(Error, Debug)]
@@ -69,19 +68,26 @@ where
             lock: None,
             polka: None,
             proposal_validator,
-            _phantom: PhantomData,
         })
     }
 
-    pub fn is_older(&self, height: u128, round: u32) -> bool {
+    pub fn compute_proposer(&self) -> Address {
+        let validators_len = self.config.validators.len() as u128;
+        let proposer_index = (((self.height % validators_len)
+            + (self.round as u128 % validators_len))
+            % validators_len) as usize;
+        self.config.validators[proposer_index]
+    }
+
+    pub(crate) fn is_older(&self, height: u128, round: u32) -> bool {
         (height, round) < (self.height, self.round)
     }
 
-    pub fn is_same(&self, height: u128, round: u32) -> bool {
+    pub(crate) fn is_same(&self, height: u128, round: u32) -> bool {
         (height, round) == (self.height, self.round)
     }
 
-    pub fn is_newer(&self, height: u128, round: u32) -> bool {
+    pub(crate) fn is_newer(&self, height: u128, round: u32) -> bool {
         (height, round) > (self.height, self.round)
     }
 

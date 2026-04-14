@@ -9,4 +9,5 @@ flexnet-consensus = { path = "crates/flexnet-consensus" }
 hex = "0.4"
 sha2 = "0.11"
 thiserror = "2"
+tokio = "1"
 zeroize = "1"

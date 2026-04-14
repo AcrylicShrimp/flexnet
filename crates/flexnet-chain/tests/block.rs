@@ -5,7 +5,7 @@ use flexnet_chain::{
     block::Block,
     hash::{Hash, compute_block_hash, compute_state_hash, compute_transactions_hash},
     rules::{
-        rule_block::{BlockExecuteError, execute_block},
+        rule_block::{BlockExecutionError, execute_block},
         rule_transfer::TransferExecutionError,
     },
     state::{StateView, WritableState},
@@ -79,7 +79,7 @@ fn reject_block_when_any_transaction_is_invalid() {
 
     assert_eq!(
         execute_block(&block, &config(), &previous_state),
-        Err(BlockExecuteError::TxExecuteError {
+        Err(BlockExecutionError::TxExecuteError {
             index: 1,
             error: TransactionExecutionError::Transfer(TransferExecutionError::InvalidNonce {
                 expected: 1,

@@ -30,7 +30,7 @@ impl Signature {
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
-pub enum VerifyError {
+pub enum VerificationError {
     #[error("invalid verifying key")]
     InvalidVerifyingKey,
     #[error("failed to verify signature")]
@@ -45,14 +45,18 @@ pub fn sign(secret_key: &SecretKey, message: &[u8]) -> Signature {
     )
 }
 
-pub fn verify(address: &Address, signature: &Signature, message: &[u8]) -> Result<(), VerifyError> {
+pub fn verify(
+    address: &Address,
+    signature: &Signature,
+    message: &[u8],
+) -> Result<(), VerificationError> {
     VerifyingKey::from_bytes(address.as_bytes())
-        .map_err(|_| VerifyError::InvalidVerifyingKey)?
+        .map_err(|_| VerificationError::InvalidVerifyingKey)?
         .verify_strict(
             message,
             &ed25519_dalek::Signature::from_bytes(signature.as_bytes()),
         )
-        .map_err(|_| VerifyError::FailedToVerify)?;
+        .map_err(|_| VerificationError::FailedToVerify)?;
 
     Ok(())
 }
@@ -67,7 +71,7 @@ pub fn address_from_secret_key(secret_key: &SecretKey) -> Address {
 
 #[cfg(test)]
 mod tests {
-    use super::{SecretKey, VerifyError, address_from_secret_key, sign, verify};
+    use super::{SecretKey, VerificationError, address_from_secret_key, sign, verify};
 
     #[test]
     fn sign_and_verify_roundtrip() {
@@ -79,7 +83,7 @@ mod tests {
         assert_eq!(verify(&address, &signature, message), Ok(()));
         assert_eq!(
             verify(&address, &signature, b"other-message"),
-            Err(VerifyError::FailedToVerify)
+            Err(VerificationError::FailedToVerify)
         );
     }
 }

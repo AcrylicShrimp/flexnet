@@ -10,7 +10,7 @@ use crate::{
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
-pub enum BlockVerifyError {
+pub enum BlockVerificationError {
     #[error("invalid chain id: expected {expected}, got {actual}")]
     InvalidChainId { expected: ChainId, actual: ChainId },
     #[error("invalid chain version: expected {expected}, got {actual}")]
@@ -37,16 +37,19 @@ pub struct ExecutionOutcome {
     pub state_hash: Hash,
 }
 
-pub fn verify_block_stateless(block: &Block, config: &ChainConfig) -> Result<(), BlockVerifyError> {
+pub fn verify_block_stateless(
+    block: &Block,
+    config: &ChainConfig,
+) -> Result<(), BlockVerificationError> {
     if block.chain_id != config.chain_id {
-        return Err(BlockVerifyError::InvalidChainId {
+        return Err(BlockVerificationError::InvalidChainId {
             expected: config.chain_id,
             actual: block.chain_id,
         });
     }
 
     if block.chain_version != config.chain_version {
-        return Err(BlockVerifyError::InvalidChainVersion {
+        return Err(BlockVerificationError::InvalidChainVersion {
             expected: config.chain_version,
             actual: block.chain_version,
         });
@@ -54,17 +57,17 @@ pub fn verify_block_stateless(block: &Block, config: &ChainConfig) -> Result<(),
 
     if block.is_genesis() {
         if block.previous_block_hash != Hash::ZERO {
-            return Err(BlockVerifyError::InvalidGenesisPreviousBlockHash);
+            return Err(BlockVerificationError::InvalidGenesisPreviousBlockHash);
         }
 
         if !block.transactions.is_empty() {
-            return Err(BlockVerifyError::NonEmptyTransactionsInGenesisBlock);
+            return Err(BlockVerificationError::NonEmptyTransactionsInGenesisBlock);
         }
     }
 
     let max_transactions = config.max_transactions_per_block.min(u16::MAX as usize);
     if block.transactions.len() > max_transactions {
-        return Err(BlockVerifyError::TooManyTransactions {
+        return Err(BlockVerificationError::TooManyTransactions {
             count: block.transactions.len(),
             max: max_transactions,
         });
@@ -73,16 +76,16 @@ pub fn verify_block_stateless(block: &Block, config: &ChainConfig) -> Result<(),
     for (index, transaction) in block.transactions.iter().enumerate() {
         transaction
             .verify_stateless(config)
-            .map_err(|error| BlockVerifyError::TxVerifyError { index, error })?;
+            .map_err(|error| BlockVerificationError::TxVerifyError { index, error })?;
     }
 
     Ok(())
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
-pub enum BlockExecuteError {
+pub enum BlockExecutionError {
     #[error("block verification failed: {0}")]
-    VerifyError(#[from] BlockVerifyError),
+    VerifyError(#[from] BlockVerificationError),
     #[error("transaction at index {index} execution failed: {error}")]
     TxExecuteError {
         index: usize,
@@ -96,7 +99,7 @@ pub fn execute_block<S>(
     block: &Block,
     config: &ChainConfig,
     state: &S,
-) -> Result<ExecutionOutcome, BlockExecuteError>
+) -> Result<ExecutionOutcome, BlockExecutionError>
 where
     S: StateView,
 {
@@ -107,14 +110,14 @@ where
     for (index, transaction) in block.transactions.iter().enumerate() {
         let delta = transaction
             .execute(config, &working_state)
-            .map_err(|error| BlockExecuteError::TxExecuteError { index, error })?;
+            .map_err(|error| BlockExecutionError::TxExecuteError { index, error })?;
         working_state.apply_delta(delta);
     }
 
     let state_hash = compute_state_hash(&working_state);
 
     if block.state_hash != state_hash {
-        return Err(BlockExecuteError::InvalidStateHash {
+        return Err(BlockExecutionError::InvalidStateHash {
             expected: block.state_hash,
             actual: state_hash,
         });
@@ -128,7 +131,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{BlockExecuteError, BlockVerifyError, execute_block, verify_block_stateless};
+    use super::{
+        BlockExecutionError, BlockVerificationError, execute_block, verify_block_stateless,
+    };
     use crate::{
         account::Account,
         address::Address,
@@ -243,7 +248,7 @@ mod tests {
                     ..config()
                 }
             ),
-            Err(BlockVerifyError::TooManyTransactions {
+            Err(BlockVerificationError::TooManyTransactions {
                 count: u16::MAX as usize + 1,
                 max: u16::MAX as usize,
             })
@@ -307,7 +312,7 @@ mod tests {
 
         assert!(matches!(
             execute_block(&block, &config(), &state),
-            Err(BlockExecuteError::InvalidStateHash { .. })
+            Err(BlockExecutionError::InvalidStateHash { .. })
         ));
     }
 }

@@ -2,7 +2,7 @@ use crate::{
     chain_config::ChainConfig,
     chain_id::ChainId,
     chain_version::ChainVersion,
-    crypto::VerifyError,
+    crypto::VerificationError,
     state::{StateDelta, StateView},
     transactions::tx_transfer::TxTransfer,
 };
@@ -22,7 +22,7 @@ pub enum TransferVerificationError {
     #[error("amount must be greater than zero")]
     ZeroAmount,
     #[error("invalid signature: {0}")]
-    InvalidSignature(VerifyError),
+    InvalidSignature(VerificationError),
 }
 
 pub fn verify_transfer_stateless(

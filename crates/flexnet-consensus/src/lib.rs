@@ -1,9 +1,15 @@
 pub mod consensus_config;
+pub mod consensus_driver;
 pub mod justification;
 pub mod lock;
+pub mod message;
+pub mod message_kind;
+pub mod messages;
 pub mod polka;
+pub mod ports;
 pub mod proposal;
 pub mod proposal_validator;
+pub mod rules;
 pub mod state;
 pub mod state_input;
 pub mod state_machine;

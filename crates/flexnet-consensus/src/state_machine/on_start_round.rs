@@ -2,7 +2,6 @@ use crate::{
     proposal::Proposal, proposal_validator::ProposalValidator, state::State,
     state_machine::StateMachine, state_output::StateOutput, vote_set::VoteSet,
 };
-use flexnet_chain::address::Address;
 
 impl<P, V> StateMachine<P, V>
 where
@@ -27,14 +26,6 @@ where
         }
 
         outputs
-    }
-
-    pub(crate) fn compute_proposer(&self) -> Address {
-        let validators_len = self.config.validators.len() as u128;
-        let proposer_index = (((self.height % validators_len)
-            + (self.round as u128 % validators_len))
-            % validators_len) as usize;
-        self.config.validators[proposer_index]
     }
 
     pub(crate) fn is_proposer(&self) -> bool {

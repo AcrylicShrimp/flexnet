@@ -6,7 +6,7 @@ use flexnet_chain::{
     chain::{Chain, ChainAppendError},
     genesis::Genesis,
     hash::{Hash, compute_block_hash},
-    rules::rule_block::BlockExecuteError,
+    rules::rule_block::BlockExecutionError,
     state::StateView,
 };
 use shared::common::{
@@ -114,7 +114,7 @@ fn reject_invalid_block_without_mutating_chain() {
 
     assert!(matches!(
         error,
-        ChainAppendError::BlockExecutionError(BlockExecuteError::InvalidStateHash { .. })
+        ChainAppendError::BlockExecutionError(BlockExecutionError::InvalidStateHash { .. })
     ));
     assert_eq!(chain, before);
 }

@@ -1,15 +1,19 @@
-use crate::codec::{DecodeError, Decoder};
+use flexnet_chain::codec::{DecodeError, Decoder};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum TransactionKind {
-    Transfer = 1,
+pub enum MessageKind {
+    Propose = 1,
+    Prevote,
+    Precommit,
 }
 
-impl TransactionKind {
+impl MessageKind {
     pub fn new(kind: u8) -> Option<Self> {
         match kind {
-            1 => Some(TransactionKind::Transfer),
+            1 => Some(MessageKind::Propose),
+            2 => Some(MessageKind::Prevote),
+            3 => Some(MessageKind::Precommit),
             _ => None,
         }
     }
@@ -38,20 +42,6 @@ impl TransactionKind {
     pub fn decode_from(decoder: &mut Decoder) -> Result<Self, DecodeError> {
         let kind = decoder.read_u8_le()?;
 
-        TransactionKind::new(kind).ok_or(DecodeError::InvalidInput)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::TransactionKind;
-    use crate::codec::DecodeError;
-
-    #[test]
-    fn reject_unknown_transaction_kind() {
-        assert_eq!(
-            TransactionKind::decode_canonical(&[0xff]),
-            Err(DecodeError::InvalidInput)
-        );
+        MessageKind::new(kind).ok_or(DecodeError::InvalidInput)
     }
 }

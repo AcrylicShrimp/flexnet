@@ -3,7 +3,7 @@ use crate::{
     chain_id::ChainId,
     chain_version::ChainVersion,
     codec::{DecodeError, Decoder},
-    crypto::{Signature, VerifyError, verify},
+    crypto::{Signature, VerificationError, verify},
     transaction_kind::TransactionKind,
 };
 
@@ -70,7 +70,7 @@ impl TxTransfer {
         Self { payload, signature }
     }
 
-    pub fn verify_signature(&self) -> Result<(), VerifyError> {
+    pub fn verify_signature(&self) -> Result<(), VerificationError> {
         let mut out = Vec::with_capacity(self.payload.signing_payload_len());
         self.payload.encode_signing_payload(&mut out);
         verify(&self.payload.from, &self.signature, &out)

@@ -4,7 +4,7 @@ use crate::{
     chain_config::ChainConfig,
     genesis::Genesis,
     hash::{Hash, compute_block_hash},
-    rules::rule_block::{BlockExecuteError, execute_block},
+    rules::rule_block::{BlockExecutionError, execute_block},
     state::WritableState,
 };
 use thiserror::Error;
@@ -30,7 +30,7 @@ pub enum ChainAppendError {
     #[error("previous block hash mismatch: expected {expected}, got {actual}")]
     PreviousBlockHashMismatch { expected: Hash, actual: Hash },
     #[error("block execution failed: {0}")]
-    BlockExecutionError(#[from] BlockExecuteError),
+    BlockExecutionError(#[from] BlockExecutionError),
 }
 
 impl<S> Chain<S>

@@ -32,6 +32,16 @@ impl<'a> Decoder<'a> {
         Ok(u16::from_le_bytes(bytes))
     }
 
+    pub fn read_u32_le(&mut self) -> Result<u32, DecodeError> {
+        let bytes = self.read_fixed::<4>()?;
+        Ok(u32::from_le_bytes(bytes))
+    }
+
+    pub fn read_u64_le(&mut self) -> Result<u64, DecodeError> {
+        let bytes = self.read_fixed::<8>()?;
+        Ok(u64::from_le_bytes(bytes))
+    }
+
     pub fn read_u128_le(&mut self) -> Result<u128, DecodeError> {
         let bytes = self.read_fixed::<16>()?;
         Ok(u128::from_le_bytes(bytes))

@@ -16,7 +16,6 @@ where
         height: u128,
         round: u32,
         proposal: P,
-        /// verified justification of the proposal
         justification: Option<Justification>,
     },
     PrevoteReceived {
@@ -24,7 +23,6 @@ where
         round: u32,
         address: Address,
         proposal_hash: Option<Hash>,
-        /// verified signature of the prevote
         signature: Signature,
     },
     PrecommitReceived {
@@ -32,7 +30,6 @@ where
         round: u32,
         address: Address,
         proposal_hash: Option<Hash>,
-        /// verified signature of the precommit
         signature: Signature,
     },
     RoundTimeout {
