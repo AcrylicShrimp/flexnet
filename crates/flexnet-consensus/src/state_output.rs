@@ -1,5 +1,5 @@
 use crate::polka::Polka;
-use flexnet_chain::{address::Address, hash::Hash};
+use flexnet_chain::hash::Hash;
 
 pub enum StateOutput<P> {
     StartTimeout {
@@ -14,12 +14,7 @@ pub enum StateOutput<P> {
     Propose {
         height: u128,
         round: u32,
-        address: Address,
-    },
-    ProposePolka {
-        height: u128,
-        round: u32,
-        polka: Polka<P>,
+        polka: Option<Polka<P>>,
     },
     Prevote {
         height: u128,

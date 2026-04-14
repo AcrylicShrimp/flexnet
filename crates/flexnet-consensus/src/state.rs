@@ -19,6 +19,7 @@ where
     Precommit {
         proposal: Option<P>,
         prevote: Option<Hash>,
+        prevote_set: VoteSet,
         precommit: Option<Hash>,
         precommit_set: VoteSet,
     },
