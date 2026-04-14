@@ -17,6 +17,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum ProposeVerificationError {
+    #[error("address {actual} is not the current proposer {expected}")]
+    NotCurrentProposer { expected: Address, actual: Address },
     #[error("block verification failed: {0}")]
     InvalidBlock(BlockVerificationError),
     #[error("signature verification failed: {0}")]
@@ -49,9 +51,17 @@ pub enum ProposeVerificationError {
 
 pub fn verify_propose_stateless(
     msg: &MsgPropose,
+    current_proposer: &Address,
     chain_config: &ChainConfig,
     consensus_config: &ConsensusConfig,
 ) -> Result<(), ProposeVerificationError> {
+    if &msg.payload.address != current_proposer {
+        return Err(ProposeVerificationError::NotCurrentProposer {
+            actual: msg.payload.address,
+            expected: *current_proposer,
+        });
+    }
+
     if let Err(err) = verify_block_stateless(&msg.payload.proposal, chain_config) {
         return Err(ProposeVerificationError::InvalidBlock(err));
     }

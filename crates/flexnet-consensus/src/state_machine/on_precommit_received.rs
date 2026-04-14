@@ -86,7 +86,7 @@ where
                 precommit_set,
                 ..
             } => precommit_set
-                .any_quorum_satisfied(self.config.quorum)
+                .any_quorum_satisfied(self.consensus_config.quorum)
                 .map(|(quorum_hash, _)| PrecommitQuorumEntry {
                     proposal: proposal.as_ref().cloned(),
                     precommit: precommit.as_ref().cloned(),

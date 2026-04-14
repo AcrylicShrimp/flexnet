@@ -1,8 +1,8 @@
 use flexnet_chain::block::Block;
 
-pub trait BlockPort
+pub trait ChainPort
 where
     Self: 'static + Send + Sync,
 {
-    fn next_candidate(&self) -> Block;
+    fn commit(&self, height: u128, block: Block);
 }

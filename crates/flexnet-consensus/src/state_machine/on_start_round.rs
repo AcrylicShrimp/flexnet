@@ -29,7 +29,7 @@ where
     }
 
     pub(crate) fn is_proposer(&self) -> bool {
-        self.compute_proposer() == self.config.address
+        self.compute_proposer() == self.consensus_config.address
     }
 
     /// Transitions to the propose state.
@@ -48,7 +48,7 @@ where
         vec![StateOutput::StartTimeout {
             height,
             round,
-            timeout_ms: self.config.round_timeout_ms,
+            timeout_ms: self.consensus_config.round_timeout_ms,
         }]
     }
 }

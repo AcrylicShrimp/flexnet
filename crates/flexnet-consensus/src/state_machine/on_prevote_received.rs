@@ -125,14 +125,14 @@ where
                 prevote,
                 prevote_set,
                 ..
-            } => prevote_set.any_quorum_satisfied(self.config.quorum).map(
-                |(quorum_hash, evidences)| PrevoteQuorumEntry {
+            } => prevote_set
+                .any_quorum_satisfied(self.consensus_config.quorum)
+                .map(|(quorum_hash, evidences)| PrevoteQuorumEntry {
                     proposal: proposal.as_ref().cloned(),
                     prevote: prevote.as_ref().cloned(),
                     quorum_hash: quorum_hash.as_ref().cloned(),
                     evidences,
-                },
-            ),
+                }),
             _ => None,
         }
     }

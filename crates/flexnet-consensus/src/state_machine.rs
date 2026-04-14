@@ -3,6 +3,8 @@ mod on_prevote_received;
 mod on_proposal_received;
 mod on_start_round;
 
+use std::sync::Arc;
+
 use crate::{
     consensus_config::ConsensusConfig,
     lock::Lock,
@@ -14,7 +16,7 @@ use crate::{
     state_output::{RoundFailureReason, StateOutput},
     vote_set::VoteSet,
 };
-use flexnet_chain::address::Address;
+use flexnet_chain::{address::Address, chain_config::ChainConfig};
 use thiserror::Error;
 
 pub struct StateMachine<P, V>
@@ -22,7 +24,8 @@ where
     P: Proposal,
     V: ProposalValidator<P>,
 {
-    config: ConsensusConfig,
+    chain_config: Arc<ChainConfig>,
+    consensus_config: Arc<ConsensusConfig>,
     height: u128,
     round: u32,
     state: State<P>,
@@ -46,19 +49,21 @@ where
 {
     pub fn new(
         height: u128,
-        config: ConsensusConfig,
+        chain_config: Arc<ChainConfig>,
+        consensus_config: Arc<ConsensusConfig>,
         proposal_validator: V,
     ) -> Result<Self, StateMachineInitError> {
-        if config.validators.is_empty() {
+        if consensus_config.validators.is_empty() {
             return Err(StateMachineInitError::ValidatorSetEmpty);
         }
 
-        if config.quorum == 0 {
+        if consensus_config.quorum == 0 {
             return Err(StateMachineInitError::QuorumZero);
         }
 
         Ok(Self {
-            config,
+            chain_config,
+            consensus_config,
             height,
             round: 0,
             state: State::Propose {
@@ -72,11 +77,11 @@ where
     }
 
     pub fn compute_proposer(&self) -> Address {
-        let validators_len = self.config.validators.len() as u128;
+        let validators_len = self.consensus_config.validators.len() as u128;
         let proposer_index = (((self.height % validators_len)
             + (self.round as u128 % validators_len))
             % validators_len) as usize;
-        self.config.validators[proposer_index]
+        self.consensus_config.validators[proposer_index]
     }
 
     pub(crate) fn is_older(&self, height: u128, round: u32) -> bool {

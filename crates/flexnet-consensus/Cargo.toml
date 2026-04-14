@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 flexnet-chain.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }

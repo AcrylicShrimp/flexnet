@@ -7,8 +7,24 @@ pub struct Justification {
     pub evidences: Vec<Evidence>,
 }
 
+impl Justification {
+    pub fn new(height: u128, round: u32, evidences: Vec<Evidence>) -> Self {
+        Self {
+            height,
+            round,
+            evidences,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Hash)]
 pub struct Evidence {
     pub address: Address,
     pub signature: Signature,
+}
+
+impl Evidence {
+    pub fn new(address: Address, signature: Signature) -> Self {
+        Self { address, signature }
+    }
 }

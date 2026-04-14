@@ -32,10 +32,13 @@ where
             return vec![];
         }
 
-        if !self
-            .proposal_validator
-            .validate(self.height, self.round, &proposal, &self.config)
-        {
+        if !self.proposal_validator.validate(
+            self.height,
+            self.round,
+            &proposal,
+            &self.chain_config,
+            &self.consensus_config,
+        ) {
             // bad proposal; prevote nil
             return self.prevote(None);
         }
@@ -74,7 +77,7 @@ where
             (Some(lock), Some(justification)) => {
                 justification.height == self.height
                     && justification.round < self.round
-                    && justification.evidences.len() >= self.config.quorum
+                    && justification.evidences.len() >= self.consensus_config.quorum
                     && lock.round < justification.round
             }
             _ => false,

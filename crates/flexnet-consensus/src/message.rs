@@ -9,6 +9,7 @@ use crate::{
     },
 };
 use flexnet_chain::{
+    address::Address,
     chain_config::ChainConfig,
     codec::{DecodeError, Decoder},
 };
@@ -89,12 +90,13 @@ impl Message {
 
     pub fn verify_stateless(
         &self,
+        current_proposer: &Address,
         chain_config: &ChainConfig,
         consensus_config: &ConsensusConfig,
     ) -> Result<(), MessageVerificationError> {
         match self {
             Message::Propose(msg) => {
-                verify_propose_stateless(msg, chain_config, consensus_config)?;
+                verify_propose_stateless(msg, current_proposer, chain_config, consensus_config)?;
             }
             Message::Prevote(msg) => {
                 verify_prevote_stateless(msg, consensus_config)?;
