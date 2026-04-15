@@ -1,5 +1,6 @@
 use crate::address::Address;
 use ed25519_dalek::{SECRET_KEY_LENGTH, SIGNATURE_LENGTH, Signer, SigningKey, VerifyingKey};
+use rand::rngs::ThreadRng;
 use thiserror::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -13,6 +14,10 @@ impl SecretKey {
 
     pub const fn as_bytes(&self) -> &[u8; SECRET_KEY_LENGTH] {
         &self.0
+    }
+
+    pub fn generate_random() -> Self {
+        Self(SigningKey::generate(&mut ThreadRng::default()).to_bytes())
     }
 }
 

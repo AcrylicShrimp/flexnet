@@ -1,6 +1,7 @@
 use crate::polka::Polka;
 use flexnet_chain::hash::Hash;
 
+#[derive(Debug)]
 pub enum StateOutput<P> {
     StartTimeout {
         height: u128,

@@ -4,5 +4,5 @@ pub trait BlockPort
 where
     Self: 'static + Send + Sync,
 {
-    fn next_candidate(&self) -> Block;
+    fn next_candidate(&mut self) -> impl Future<Output = Block> + Send;
 }

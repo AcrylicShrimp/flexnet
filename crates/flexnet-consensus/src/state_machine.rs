@@ -48,7 +48,6 @@ where
     V: ProposalValidator<P>,
 {
     pub fn new(
-        height: u128,
         chain_config: Arc<ChainConfig>,
         consensus_config: Arc<ConsensusConfig>,
         proposal_validator: V,
@@ -64,7 +63,7 @@ where
         Ok(Self {
             chain_config,
             consensus_config,
-            height,
+            height: 0,
             round: 0,
             state: State::Propose {
                 prevote_set: VoteSet::new(),

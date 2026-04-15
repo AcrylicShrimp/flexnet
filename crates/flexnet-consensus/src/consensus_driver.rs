@@ -75,8 +75,8 @@ impl ConsensusDriver {
 
         let (stop_signal_sender, stop_signal_receiver) = tokio::sync::mpsc::channel(1);
         let join_handle = tokio::spawn(driver_loop(
+            height,
             StateMachine::new(
-                height,
                 self.chain_config.clone(),
                 self.consensus_config.clone(),
                 ProposalBlockValidator,
@@ -108,23 +108,23 @@ impl ConsensusDriver {
     }
 }
 
+struct Timeout {
+    height: u128,
+    round: u32,
+    instant: Instant,
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn driver_loop(
+    initial_height: u128,
     mut state_machine: StateMachine<ProposalBlock, ProposalBlockValidator>,
     chain_config: Arc<ChainConfig>,
     consensus_config: Arc<ConsensusConfig>,
-    message_port: impl MessagePort,
-    block_port: impl BlockPort,
+    mut message_port: impl MessagePort,
+    mut block_port: impl BlockPort,
     chain_port: impl ChainPort,
     mut stop_signal: Receiver<()>,
 ) {
-    struct Timeout {
-        height: u128,
-        round: u32,
-        instant: Instant,
-    }
-
-    let message_sender = message_port.sender();
-    let mut message_receiver = message_port.receiver();
     let mut next_timeout: Option<Timeout> = None;
 
     async fn conditional_timeout(next_timeout: Option<&Timeout>) -> Option<&Timeout> {
@@ -137,9 +137,22 @@ async fn driver_loop(
         }
     }
 
+    put_state_input(
+        StateInput::StartHeight {
+            height: initial_height,
+        },
+        &mut state_machine,
+        &chain_config,
+        &consensus_config,
+        &mut message_port,
+        &mut block_port,
+        &chain_port,
+        &mut next_timeout,
+    );
+
     loop {
         let state_input = select! {
-            Some(message) = message_receiver.recv() => {
+            Some(message) = message_port.receiver().recv() => {
                 message_to_state_input(message, &state_machine, &chain_config, &consensus_config).ok()
             }
             Some(timeout) = conditional_timeout(next_timeout.as_ref()) => {
@@ -162,119 +175,159 @@ async fn driver_loop(
             }
         };
 
-        let mut current_state_outputs = state_machine.step(state_input);
+        put_state_input(
+            state_input,
+            &mut state_machine,
+            &chain_config,
+            &consensus_config,
+            &mut message_port,
+            &mut block_port,
+            &chain_port,
+            &mut next_timeout,
+        );
+    }
+}
 
-        while !current_state_outputs.is_empty() {
-            let mut next_state_outputs = vec![];
+#[allow(clippy::too_many_arguments)]
+fn put_state_input(
+    state_input: StateInput<ProposalBlock>,
+    state_machine: &mut StateMachine<ProposalBlock, ProposalBlockValidator>,
+    chain_config: &ChainConfig,
+    consensus_config: &ConsensusConfig,
+    message_port: &mut impl MessagePort,
+    block_port: &mut impl BlockPort,
+    chain_port: &impl ChainPort,
+    timeout: &mut Option<Timeout>,
+    self_propose_message_sender: Sender<MsgPropose>,
+) {
+    println!("state_input: {:#?}", state_input);
 
-            for state_output in current_state_outputs {
-                match state_output {
-                    StateOutput::StartTimeout {
+    let mut current_state_outputs = state_machine.step(state_input);
+
+    println!("current_state_outputs: {:#?}", current_state_outputs);
+
+    while !current_state_outputs.is_empty() {
+        let mut next_state_outputs = vec![];
+
+        for state_output in current_state_outputs {
+            match state_output {
+                StateOutput::StartTimeout {
+                    height,
+                    round,
+                    timeout_ms,
+                } => {
+                    *timeout = Some(Timeout {
                         height,
                         round,
-                        timeout_ms,
-                    } => {
-                        next_timeout = Some(Timeout {
-                            height,
-                            round,
-                            instant: Instant::now() + Duration::from_millis(timeout_ms),
-                        });
-                    }
-                    StateOutput::StartRound { height, round } => {
-                        next_state_outputs
-                            .extend(state_machine.step(StateInput::StartRound { height, round }));
-                    }
-                    StateOutput::Propose {
-                        height,
-                        round,
-                        polka,
-                    } => {
-                        let propose_message = make_propose_message(
-                            height,
-                            round,
-                            polka,
-                            &block_port,
-                            &consensus_config,
-                        );
-                        let next_state_input = message_to_state_input(
-                            Message::Propose(propose_message.clone()),
-                            &state_machine,
-                            &chain_config,
-                            &consensus_config,
-                        )
-                        .expect("failed to convert local message to state input");
+                        instant: Instant::now() + Duration::from_millis(timeout_ms),
+                    });
+                }
+                StateOutput::StartRound { height, round } => {
+                    next_state_outputs
+                        .extend(state_machine.step(StateInput::StartRound { height, round }));
+                }
+                StateOutput::Propose {
+                    height,
+                    round,
+                    polka,
+                } => {
+                    // TODO: do not wait for the propose message to be ready1923
+                    let propose_message_future =
+                        make_propose_message(height, round, polka, block_port, consensus_config);
 
-                        next_state_outputs.extend(state_machine.step(next_state_input));
+                    let next_state_input = message_to_state_input(
+                        Message::Propose(propose_message.clone()),
+                        state_machine,
+                        chain_config,
+                        consensus_config,
+                    )
+                    .expect("failed to convert local message to state input");
 
+                    next_state_outputs.extend(state_machine.step(next_state_input));
+
+                    tokio::spawn(async move {
                         // TODO: handle error
-                        let _ = message_sender.send(Message::Propose(propose_message)).await;
-                    }
-                    StateOutput::Prevote {
-                        height,
-                        round,
-                        proposal_hash,
-                    } => {
-                        let prevote_message =
-                            make_prevote_message(height, round, proposal_hash, &consensus_config);
-                        let next_state_input = message_to_state_input(
-                            Message::Prevote(prevote_message.clone()),
-                            &state_machine,
-                            &chain_config,
-                            &consensus_config,
-                        )
-                        .expect("failed to convert local message to state input");
+                        let _ = message_port
+                            .sender()
+                            .send(Message::Propose(propose_message))
+                            .await;
+                    });
+                }
+                StateOutput::Prevote {
+                    height,
+                    round,
+                    proposal_hash,
+                } => {
+                    let prevote_message =
+                        make_prevote_message(height, round, proposal_hash, consensus_config);
+                    let next_state_input = message_to_state_input(
+                        Message::Prevote(prevote_message.clone()),
+                        state_machine,
+                        chain_config,
+                        consensus_config,
+                    )
+                    .expect("failed to convert local message to state input");
 
-                        next_state_outputs.extend(state_machine.step(next_state_input));
+                    next_state_outputs.extend(state_machine.step(next_state_input));
 
+                    tokio::spawn(async move {
                         // TODO: handle error
-                        let _ = message_sender.send(Message::Prevote(prevote_message)).await;
-                    }
-                    StateOutput::Precommit {
-                        height,
-                        round,
-                        proposal_hash,
-                    } => {
-                        let precommit_message =
-                            make_precommit_message(height, round, proposal_hash, &consensus_config);
-                        let next_state_input = message_to_state_input(
-                            Message::Precommit(precommit_message.clone()),
-                            &state_machine,
-                            &chain_config,
-                            &consensus_config,
-                        )
-                        .expect("failed to convert local message to state input");
+                        let _ = message_port
+                            .sender()
+                            .send(Message::Prevote(prevote_message))
+                            .await;
+                    });
+                }
+                StateOutput::Precommit {
+                    height,
+                    round,
+                    proposal_hash,
+                } => {
+                    let precommit_message =
+                        make_precommit_message(height, round, proposal_hash, consensus_config);
+                    let next_state_input = message_to_state_input(
+                        Message::Precommit(precommit_message.clone()),
+                        state_machine,
+                        chain_config,
+                        consensus_config,
+                    )
+                    .expect("failed to convert local message to state input");
 
-                        next_state_outputs.extend(state_machine.step(next_state_input));
+                    next_state_outputs.extend(state_machine.step(next_state_input));
 
+                    tokio::spawn(async move {
                         // TODO: handle error
-                        let _ = message_sender
+                        let _ = message_port
+                            .sender()
                             .send(Message::Precommit(precommit_message))
                             .await;
-                    }
-                    StateOutput::Commit {
-                        height, proposal, ..
-                    } => {
-                        chain_port.commit(height, proposal.into_block());
+                    });
+                }
+                StateOutput::Commit {
+                    height, proposal, ..
+                } => {
+                    chain_port.commit(height, proposal.into_block());
 
-                        let next_height = height.checked_add(1).expect("height overflow");
+                    let next_height = height.checked_add(1).expect("height overflow");
 
-                        next_state_outputs.extend(state_machine.step(StateInput::StartHeight {
-                            height: next_height,
-                        }));
-                    }
-                    StateOutput::RoundFailure { height, round, .. } => {
-                        let next_round = round.checked_add(1).expect("round overflow");
+                    next_state_outputs.extend(state_machine.step(StateInput::StartHeight {
+                        height: next_height,
+                    }));
+                }
+                StateOutput::RoundFailure { height, round, .. } => {
+                    let next_round = round.checked_add(1).expect("round overflow");
 
-                        next_state_outputs.extend(state_machine.step(StateInput::StartRound {
-                            height,
-                            round: next_round,
-                        }));
-                    }
+                    next_state_outputs.extend(state_machine.step(StateInput::StartRound {
+                        height,
+                        round: next_round,
+                    }));
                 }
             }
-
-            current_state_outputs = next_state_outputs;
         }
+
+        println!("next_state_outputs: {:#?}", next_state_outputs);
+
+        current_state_outputs = next_state_outputs;
     }
 }
 
@@ -324,11 +377,11 @@ fn message_to_state_input(
     })
 }
 
-fn make_propose_message(
+async fn make_propose_message(
     height: u128,
     round: u32,
     polka: Option<Polka<ProposalBlock>>,
-    block_port: &impl BlockPort,
+    block_port: &mut impl BlockPort,
     consensus_config: &ConsensusConfig,
 ) -> MsgPropose {
     let (proposal, justification) = match polka {
@@ -348,7 +401,7 @@ fn make_propose_message(
                     .collect(),
             )),
         ),
-        None => (block_port.next_candidate(), None),
+        None => (block_port.next_candidate().await, None),
     };
 
     let payload = ProposePayload {

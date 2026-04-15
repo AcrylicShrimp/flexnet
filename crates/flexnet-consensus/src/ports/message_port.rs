@@ -5,6 +5,6 @@ pub trait MessagePort
 where
     Self: 'static + Send + Sync,
 {
-    fn sender(&self) -> Sender<Message>;
-    fn receiver(&self) -> Receiver<Message>;
+    fn sender(&self) -> &Sender<Message>;
+    fn receiver(&mut self) -> &mut Receiver<Message>;
 }

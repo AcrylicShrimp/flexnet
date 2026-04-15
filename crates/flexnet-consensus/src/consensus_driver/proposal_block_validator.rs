@@ -22,5 +22,7 @@ impl ProposalValidator<ProposalBlock> for ProposalBlockValidator {
         }
 
         verify_block_stateless(proposal.as_block(), chain_config).is_ok()
+
+        // TODO: verify the block against the current chain state
     }
 }
