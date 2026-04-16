@@ -162,7 +162,7 @@ impl InteractiveInfiniteBlockPort {
 }
 
 impl BlockPort for InteractiveInfiniteBlockPort {
-    async fn next_candidate(&mut self) -> Block {
+    async fn next_candidate(&mut self, _height: u128) -> Block {
         let _ = self.request_sender.send(()).await;
         let _ = self.response_receiver.recv().await;
 

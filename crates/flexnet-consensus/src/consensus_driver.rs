@@ -1,34 +1,33 @@
+mod make_messages;
+mod message_to_state_input;
 mod proposal_block;
 mod proposal_block_validator;
+mod proposal_generator;
+mod run_state_machine;
+mod timeout;
 
 use crate::{
     consensus_config::ConsensusConfig,
     consensus_driver::{
-        proposal_block::ProposalBlock, proposal_block_validator::ProposalBlockValidator,
+        message_to_state_input::message_to_state_input,
+        proposal_block::ProposalBlock,
+        proposal_block_validator::ProposalBlockValidator,
+        proposal_generator::ProposalGenerator,
+        run_state_machine::{StateMachineExecutionContext, run_state_machine},
+        timeout::{Timeout, conditional_timeout},
     },
-    justification::{Evidence, Justification},
-    message::{Message, MessageVerificationError},
-    messages::{
-        msg_precommit::{MsgPrecommit, PrecommitPayload},
-        msg_prevote::{MsgPrevote, PrevotePayload},
-        msg_propose::{
-            MsgPropose, ProposeEvidencePayload, ProposeJustificationPayload, ProposePayload,
-        },
-    },
-    polka::Polka,
+    message::Message,
     ports::{block_port::BlockPort, chain_port::ChainPort, message_port::MessagePort},
     state_input::StateInput,
     state_machine::{StateMachine, StateMachineInitError},
-    state_output::StateOutput,
 };
-use flexnet_chain::{chain_config::ChainConfig, crypto::sign, hash::Hash};
-use std::{sync::Arc, time::Duration};
+use flexnet_chain::chain_config::ChainConfig;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::{
     select,
     sync::mpsc::{Receiver, Sender},
     task::JoinHandle,
-    time::Instant,
 };
 
 struct JobContext {
@@ -108,12 +107,6 @@ impl ConsensusDriver {
     }
 }
 
-struct Timeout {
-    height: u128,
-    round: u32,
-    instant: Instant,
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn driver_loop(
     initial_height: u128,
@@ -121,37 +114,34 @@ async fn driver_loop(
     chain_config: Arc<ChainConfig>,
     consensus_config: Arc<ConsensusConfig>,
     mut message_port: impl MessagePort,
-    mut block_port: impl BlockPort,
+    block_port: impl BlockPort,
     chain_port: impl ChainPort,
     mut stop_signal: Receiver<()>,
 ) {
     let mut next_timeout: Option<Timeout> = None;
+    let (proposal_generator, mut proposal_receiver) =
+        ProposalGenerator::new(block_port, consensus_config.clone());
 
-    async fn conditional_timeout(next_timeout: Option<&Timeout>) -> Option<&Timeout> {
-        match next_timeout {
-            Some(timeout) => {
-                tokio::time::sleep_until(timeout.instant).await;
-                Some(timeout)
-            }
-            None => None,
-        }
-    }
-
-    put_state_input(
+    run_state_machine(
         StateInput::StartHeight {
             height: initial_height,
         },
+        StateMachineExecutionContext {
+            chain_config: &chain_config,
+            consensus_config: &consensus_config,
+            timeout: &mut next_timeout,
+            message_port: &mut message_port,
+            proposal_generator: &proposal_generator,
+            chain_port: &chain_port,
+        },
         &mut state_machine,
-        &chain_config,
-        &consensus_config,
-        &mut message_port,
-        &mut block_port,
-        &chain_port,
-        &mut next_timeout,
     );
 
     loop {
         let state_input = select! {
+            Some(proposal) = proposal_receiver.recv() => {
+                message_to_state_input(Message::Propose(proposal), &state_machine, &chain_config, &consensus_config).ok()
+            }
             Some(message) = message_port.receiver().recv() => {
                 message_to_state_input(message, &state_machine, &chain_config, &consensus_config).ok()
             }
@@ -175,286 +165,17 @@ async fn driver_loop(
             }
         };
 
-        put_state_input(
+        run_state_machine(
             state_input,
+            StateMachineExecutionContext {
+                chain_config: &chain_config,
+                consensus_config: &consensus_config,
+                timeout: &mut next_timeout,
+                message_port: &mut message_port,
+                proposal_generator: &proposal_generator,
+                chain_port: &chain_port,
+            },
             &mut state_machine,
-            &chain_config,
-            &consensus_config,
-            &mut message_port,
-            &mut block_port,
-            &chain_port,
-            &mut next_timeout,
         );
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn put_state_input(
-    state_input: StateInput<ProposalBlock>,
-    state_machine: &mut StateMachine<ProposalBlock, ProposalBlockValidator>,
-    chain_config: &ChainConfig,
-    consensus_config: &ConsensusConfig,
-    message_port: &mut impl MessagePort,
-    block_port: &mut impl BlockPort,
-    chain_port: &impl ChainPort,
-    timeout: &mut Option<Timeout>,
-    self_propose_message_sender: Sender<MsgPropose>,
-) {
-    println!("state_input: {:#?}", state_input);
-
-    let mut current_state_outputs = state_machine.step(state_input);
-
-    println!("current_state_outputs: {:#?}", current_state_outputs);
-
-    while !current_state_outputs.is_empty() {
-        let mut next_state_outputs = vec![];
-
-        for state_output in current_state_outputs {
-            match state_output {
-                StateOutput::StartTimeout {
-                    height,
-                    round,
-                    timeout_ms,
-                } => {
-                    *timeout = Some(Timeout {
-                        height,
-                        round,
-                        instant: Instant::now() + Duration::from_millis(timeout_ms),
-                    });
-                }
-                StateOutput::StartRound { height, round } => {
-                    next_state_outputs
-                        .extend(state_machine.step(StateInput::StartRound { height, round }));
-                }
-                StateOutput::Propose {
-                    height,
-                    round,
-                    polka,
-                } => {
-                    // TODO: do not wait for the propose message to be ready1923
-                    let propose_message_future =
-                        make_propose_message(height, round, polka, block_port, consensus_config);
-
-                    let next_state_input = message_to_state_input(
-                        Message::Propose(propose_message.clone()),
-                        state_machine,
-                        chain_config,
-                        consensus_config,
-                    )
-                    .expect("failed to convert local message to state input");
-
-                    next_state_outputs.extend(state_machine.step(next_state_input));
-
-                    tokio::spawn(async move {
-                        // TODO: handle error
-                        let _ = message_port
-                            .sender()
-                            .send(Message::Propose(propose_message))
-                            .await;
-                    });
-                }
-                StateOutput::Prevote {
-                    height,
-                    round,
-                    proposal_hash,
-                } => {
-                    let prevote_message =
-                        make_prevote_message(height, round, proposal_hash, consensus_config);
-                    let next_state_input = message_to_state_input(
-                        Message::Prevote(prevote_message.clone()),
-                        state_machine,
-                        chain_config,
-                        consensus_config,
-                    )
-                    .expect("failed to convert local message to state input");
-
-                    next_state_outputs.extend(state_machine.step(next_state_input));
-
-                    tokio::spawn(async move {
-                        // TODO: handle error
-                        let _ = message_port
-                            .sender()
-                            .send(Message::Prevote(prevote_message))
-                            .await;
-                    });
-                }
-                StateOutput::Precommit {
-                    height,
-                    round,
-                    proposal_hash,
-                } => {
-                    let precommit_message =
-                        make_precommit_message(height, round, proposal_hash, consensus_config);
-                    let next_state_input = message_to_state_input(
-                        Message::Precommit(precommit_message.clone()),
-                        state_machine,
-                        chain_config,
-                        consensus_config,
-                    )
-                    .expect("failed to convert local message to state input");
-
-                    next_state_outputs.extend(state_machine.step(next_state_input));
-
-                    tokio::spawn(async move {
-                        // TODO: handle error
-                        let _ = message_port
-                            .sender()
-                            .send(Message::Precommit(precommit_message))
-                            .await;
-                    });
-                }
-                StateOutput::Commit {
-                    height, proposal, ..
-                } => {
-                    chain_port.commit(height, proposal.into_block());
-
-                    let next_height = height.checked_add(1).expect("height overflow");
-
-                    next_state_outputs.extend(state_machine.step(StateInput::StartHeight {
-                        height: next_height,
-                    }));
-                }
-                StateOutput::RoundFailure { height, round, .. } => {
-                    let next_round = round.checked_add(1).expect("round overflow");
-
-                    next_state_outputs.extend(state_machine.step(StateInput::StartRound {
-                        height,
-                        round: next_round,
-                    }));
-                }
-            }
-        }
-
-        println!("next_state_outputs: {:#?}", next_state_outputs);
-
-        current_state_outputs = next_state_outputs;
-    }
-}
-
-fn message_to_state_input(
-    message: Message,
-    state_machine: &StateMachine<ProposalBlock, ProposalBlockValidator>,
-    chain_config: &ChainConfig,
-    consensus_config: &ConsensusConfig,
-) -> Result<StateInput<ProposalBlock>, MessageVerificationError> {
-    message.verify_stateless(
-        &state_machine.compute_proposer(),
-        chain_config,
-        consensus_config,
-    )?;
-
-    Ok(match message {
-        Message::Propose(msg_propose) => StateInput::ProposalReceived {
-            height: msg_propose.payload.height,
-            round: msg_propose.payload.round,
-            proposal: ProposalBlock::new(msg_propose.payload.proposal),
-            justification: msg_propose.payload.justification.map(|justification| {
-                Justification::new(
-                    justification.height,
-                    justification.round,
-                    justification
-                        .evidences
-                        .into_iter()
-                        .map(|evidence| Evidence::new(evidence.address, evidence.signature))
-                        .collect(),
-                )
-            }),
-        },
-        Message::Prevote(msg_prevote) => StateInput::PrevoteReceived {
-            height: msg_prevote.payload.height,
-            round: msg_prevote.payload.round,
-            address: msg_prevote.payload.address,
-            proposal_hash: msg_prevote.payload.proposal_hash,
-            signature: msg_prevote.signature,
-        },
-        Message::Precommit(msg_precommit) => StateInput::PrecommitReceived {
-            height: msg_precommit.payload.height,
-            round: msg_precommit.payload.round,
-            address: msg_precommit.payload.address,
-            proposal_hash: msg_precommit.payload.proposal_hash,
-            signature: msg_precommit.signature,
-        },
-    })
-}
-
-async fn make_propose_message(
-    height: u128,
-    round: u32,
-    polka: Option<Polka<ProposalBlock>>,
-    block_port: &mut impl BlockPort,
-    consensus_config: &ConsensusConfig,
-) -> MsgPropose {
-    let (proposal, justification) = match polka {
-        Some(polka) => (
-            polka.proposal.into_block(),
-            Some(ProposeJustificationPayload::new(
-                polka.justification.height,
-                polka.justification.round,
-                polka.proposal_hash,
-                polka
-                    .justification
-                    .evidences
-                    .into_iter()
-                    .map(|evidence| {
-                        ProposeEvidencePayload::new(evidence.address, evidence.signature)
-                    })
-                    .collect(),
-            )),
-        ),
-        None => (block_port.next_candidate().await, None),
-    };
-
-    let payload = ProposePayload {
-        height,
-        round,
-        address: consensus_config.address,
-        proposal,
-        justification,
-    };
-
-    let mut out = Vec::with_capacity(payload.signing_payload_len());
-    payload.encode_signing_payload(&mut out);
-    let signature = sign(&consensus_config.secret_key, &out);
-
-    MsgPropose { payload, signature }
-}
-
-fn make_prevote_message(
-    height: u128,
-    round: u32,
-    proposal_hash: Option<Hash>,
-    consensus_config: &ConsensusConfig,
-) -> MsgPrevote {
-    let payload = PrevotePayload {
-        height,
-        round,
-        address: consensus_config.address,
-        proposal_hash,
-    };
-
-    let mut out = Vec::with_capacity(payload.signing_payload_len());
-    payload.encode_signing_payload(&mut out);
-    let signature = sign(&consensus_config.secret_key, &out);
-
-    MsgPrevote { payload, signature }
-}
-
-fn make_precommit_message(
-    height: u128,
-    round: u32,
-    proposal_hash: Option<Hash>,
-    consensus_config: &ConsensusConfig,
-) -> MsgPrecommit {
-    let payload = PrecommitPayload {
-        height,
-        round,
-        address: consensus_config.address,
-        proposal_hash,
-    };
-
-    let mut out = Vec::with_capacity(payload.signing_payload_len());
-    payload.encode_signing_payload(&mut out);
-    let signature = sign(&consensus_config.secret_key, &out);
-
-    MsgPrecommit { payload, signature }
 }
