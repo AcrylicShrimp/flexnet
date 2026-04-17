@@ -30,17 +30,14 @@ where
 
         let mut chain = self.chain.lock();
 
-        let expected_height = match chain.next_block_height() {
-            Some(height) => height,
-            None => {
-                return;
+        match chain.append_block(block) {
+            Ok(_) => {}
+            Err(err) => {
+                println!(
+                    "ValidatingChainPort::commit: appending block failed: {:?}",
+                    err
+                );
             }
-        };
-
-        if expected_height != height {
-            return;
         }
-
-        let _ = chain.append_block(block);
     }
 }

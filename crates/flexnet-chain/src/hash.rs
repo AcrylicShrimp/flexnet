@@ -1,5 +1,9 @@
 use crate::{
-    account::Account, address::Address, block::Block, state::StateView, transaction::Transaction,
+    account::Account,
+    address::Address,
+    block::Block,
+    state::{StateDelta, StateDeltaOverlay, StateView},
+    transaction::Transaction,
 };
 use sha2::{Digest, Sha256};
 use std::fmt::Display;
@@ -70,6 +74,23 @@ where
     let mut rolling = Hash::ZERO;
 
     for (address, account) in state
+        .all_accounts_in_order()
+        .filter(|(_, account)| !account.is_empty())
+    {
+        rolling = Hash::compute(&encode_state_hash_preimage(&rolling, &address, &account));
+    }
+
+    rolling
+}
+
+pub fn compute_state_hash_from_delta<S>(state: &S, delta: &StateDelta) -> Hash
+where
+    S: StateView,
+{
+    let mut rolling = Hash::ZERO;
+    let overlay = StateDeltaOverlay::new(state, delta);
+
+    for (address, account) in overlay
         .all_accounts_in_order()
         .filter(|(_, account)| !account.is_empty())
     {

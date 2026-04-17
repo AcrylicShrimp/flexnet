@@ -16,11 +16,17 @@ pub fn message_to_state_input(
     chain_config: &ChainConfig,
     consensus_config: &ConsensusConfig,
 ) -> Result<StateInput<ProposalBlock>, MessageVerificationError> {
-    message.verify_stateless(
+    match message.verify_stateless(
         &state_machine.compute_proposer(),
         chain_config,
         consensus_config,
-    )?;
+    ) {
+        Ok(_) => {}
+        Err(err) => {
+            println!("Message verification failed: {:?}", err);
+            return Err(err);
+        }
+    };
 
     Ok(match message {
         Message::Propose(msg_propose) => StateInput::ProposalReceived {

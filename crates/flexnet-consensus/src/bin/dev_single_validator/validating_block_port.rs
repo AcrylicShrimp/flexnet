@@ -1,4 +1,7 @@
-use flexnet_chain::{block::Block, chain::Chain, state::WritableState};
+use flexnet_chain::{
+    block::Block, chain::Chain, hash::compute_state_hash_from_delta,
+    rules::rule_block::compute_state_delta_from_transactions, state::WritableState,
+};
 use flexnet_consensus::ports::block_port::BlockPort;
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -31,16 +34,19 @@ where
             return None;
         }
 
+        let tx = vec![];
+        let state = chain.state();
         let config = chain.config();
-        let tip_block = chain.tip_block();
+        let state_delta = compute_state_delta_from_transactions(state, &tx, config).ok()?;
+        let state_hash = compute_state_hash_from_delta(state, &state_delta);
 
         Some(Block::new(
             config.chain_id,
             config.chain_version,
             next_height,
-            tip_block.previous_block_hash,
-            tip_block.state_hash,
-            Vec::new(),
+            chain.tip_block_hash(),
+            state_hash,
+            tx,
         ))
     }
 }

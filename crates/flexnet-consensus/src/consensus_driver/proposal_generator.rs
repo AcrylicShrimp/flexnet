@@ -95,7 +95,7 @@ async fn generate_proposal_using_block<B>(
 where
     B: BlockPort,
 {
-    let mut block_port = block_port.lock().await;
+    let block_port = block_port.lock().await;
     let block = block_port.next_candidate(height).await?;
 
     Some(make_propose_message_using_block(

@@ -35,75 +35,82 @@ impl StateDelta {
     pub fn into_account_updates(self) -> BTreeMap<Address, Account> {
         self.account_updates
     }
-}
 
-#[derive(Debug)]
-pub struct WorkingState<'a, S>
-where
-    S: StateView,
-{
-    base: &'a S,
-    account_updates: BTreeMap<Address, Account>,
-}
+    pub fn merge(lhs: Self, rhs: Self) -> Self {
+        let mut result = Self::new();
 
-impl<'a, S> WorkingState<'a, S>
-where
-    S: StateView,
-{
-    pub fn new(base: &'a S) -> Self {
-        Self {
-            base,
-            account_updates: BTreeMap::new(),
-        }
-    }
+        result.account_updates.extend(lhs.account_updates);
+        result.account_updates.extend(rhs.account_updates);
 
-    pub fn into_delta(self) -> StateDelta {
-        StateDelta {
-            account_updates: self.account_updates,
-        }
+        result
     }
 }
 
-impl<S> StateView for WorkingState<'_, S>
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StateDeltaOverlay<'s, S>
+where
+    S: StateView,
+{
+    base: &'s S,
+    delta: &'s StateDelta,
+}
+
+impl<'s, S> StateDeltaOverlay<'s, S>
+where
+    S: StateView,
+{
+    pub fn new(base: &'s S, delta: &'s StateDelta) -> Self {
+        Self { base, delta }
+    }
+}
+
+impl<'s, S> StateView for StateDeltaOverlay<'s, S>
 where
     S: StateView,
 {
     fn all_accounts_in_order(&self) -> impl Iterator<Item = (Address, Account)> {
-        let mut merged = BTreeMap::new();
+        let mut base = self.base.all_accounts_in_order().peekable();
+        let mut delta = self
+            .delta
+            .account_updates()
+            .iter()
+            .map(|(address, account)| (*address, *account))
+            .peekable();
 
-        for (address, account) in self.base.all_accounts_in_order() {
-            merged.insert(address, account);
-        }
+        std::iter::from_fn(move || {
+            match (base.peek().copied(), delta.peek().copied()) {
+                (None, None) => None,
+                (Some(_), None) => base.next(),
+                (None, Some(_)) => delta.next(),
+                (Some((base_addr, _)), Some((delta_addr, _))) => {
+                    if base_addr < delta_addr {
+                        return base.next();
+                    }
 
-        for (address, account) in &self.account_updates {
-            merged.insert(*address, *account);
-        }
+                    if base_addr > delta_addr {
+                        return delta.next();
+                    }
 
-        merged.into_iter()
+                    // same address: delta overrides base
+                    let _ = base.next();
+                    delta.next()
+                }
+            }
+        })
     }
 
     fn get_account(&self, address: &Address) -> Account {
-        self.account_updates
+        self.delta
+            .account_updates()
             .get(address)
             .copied()
             .unwrap_or_else(|| self.base.get_account(address))
     }
 }
 
-impl<S> WritableState for WorkingState<'_, S>
-where
-    S: StateView,
-{
-    fn apply_delta(&mut self, delta: StateDelta) {
-        for (address, account) in delta.into_account_updates() {
-            self.account_updates.insert(address, account);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{StateDelta, StateView, WorkingState, WritableState};
+    use super::{StateDelta, StateView, WritableState};
     use crate::{account::Account, address::Address};
     use std::collections::BTreeMap;
 
@@ -156,35 +163,6 @@ mod tests {
 
         assert!(!delta.is_empty());
         assert_eq!(delta.account_updates().len(), 1);
-    }
-
-    #[test]
-    fn working_state_reads_overlay_before_base() {
-        let base = TestState::new(BTreeMap::from([
-            (address(1), Account::new(10, 0)),
-            (address(3), Account::new(30, 0)),
-        ]));
-        let mut working = WorkingState::new(&base);
-        let mut delta = StateDelta::new();
-        delta.update_account(address(1), Account::new(9, 1));
-        delta.update_account(address(2), Account::new(20, 0));
-        delta.update_account(address(3), Account::new(0, 0));
-
-        working.apply_delta(delta);
-
-        let merged = working.all_accounts_in_order().collect::<Vec<_>>();
-
-        assert_eq!(working.get_account(&address(1)), Account::new(9, 1));
-        assert_eq!(working.get_account(&address(2)), Account::new(20, 0));
-        assert_eq!(working.get_account(&address(3)), Account::new(0, 0));
-        assert_eq!(
-            merged,
-            vec![
-                (address(1), Account::new(9, 1)),
-                (address(2), Account::new(20, 0)),
-                (address(3), Account::new(0, 0)),
-            ]
-        );
     }
 
     #[test]

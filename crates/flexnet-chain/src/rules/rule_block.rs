@@ -3,9 +3,9 @@ use crate::{
     chain_config::ChainConfig,
     chain_id::ChainId,
     chain_version::ChainVersion,
-    hash::{Hash, compute_state_hash},
-    state::{StateDelta, StateView, WorkingState, WritableState},
-    transaction::{TransactionExecutionError, TransactionVerificationError},
+    hash::{Hash, compute_state_hash_from_delta},
+    state::{StateDelta, StateView},
+    transaction::{Transaction, TransactionExecutionError, TransactionVerificationError},
 };
 use thiserror::Error;
 
@@ -105,16 +105,8 @@ where
 {
     verify_block_stateless(block, config)?;
 
-    let mut working_state = WorkingState::new(state);
-
-    for (index, transaction) in block.transactions.iter().enumerate() {
-        let delta = transaction
-            .execute(config, &working_state)
-            .map_err(|error| BlockExecutionError::TxExecuteError { index, error })?;
-        working_state.apply_delta(delta);
-    }
-
-    let state_hash = compute_state_hash(&working_state);
+    let state_delta = compute_state_delta_from_transactions(state, &block.transactions, config)?;
+    let state_hash = compute_state_hash_from_delta(state, &state_delta);
 
     if block.state_hash != state_hash {
         return Err(BlockExecutionError::InvalidStateHash {
@@ -124,9 +116,29 @@ where
     }
 
     Ok(ExecutionOutcome {
-        state_delta: working_state.into_delta(),
+        state_delta,
         state_hash,
     })
+}
+
+pub fn compute_state_delta_from_transactions<S>(
+    state: &S,
+    transactions: &[Transaction],
+    config: &ChainConfig,
+) -> Result<StateDelta, BlockExecutionError>
+where
+    S: StateView,
+{
+    let mut state_delta = StateDelta::new();
+
+    for (index, transaction) in transactions.iter().enumerate() {
+        let delta = transaction
+            .execute(config, state)
+            .map_err(|error| BlockExecutionError::TxExecuteError { index, error })?;
+        state_delta = StateDelta::merge(state_delta, delta);
+    }
+
+    Ok(state_delta)
 }
 
 #[cfg(test)]
