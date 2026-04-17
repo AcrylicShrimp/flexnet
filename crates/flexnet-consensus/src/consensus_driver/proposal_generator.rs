@@ -63,6 +63,13 @@ where
                     let proposal =
                         generate_proposal_using_block(block_port, height, round, &consensus_config)
                             .await;
+                    let proposal = match proposal {
+                        Some(proposal) => proposal,
+                        None => {
+                            return;
+                        }
+                    };
+
                     let _ = proposal_sender.send(proposal).await;
                 });
             }
@@ -84,12 +91,17 @@ async fn generate_proposal_using_block<B>(
     height: u128,
     round: u32,
     consensus_config: &ConsensusConfig,
-) -> MsgPropose
+) -> Option<MsgPropose>
 where
     B: BlockPort,
 {
     let mut block_port = block_port.lock().await;
-    let block = block_port.next_candidate(height).await;
+    let block = block_port.next_candidate(height).await?;
 
-    make_propose_message_using_block(height, round, block, consensus_config)
+    Some(make_propose_message_using_block(
+        height,
+        round,
+        block,
+        consensus_config,
+    ))
 }

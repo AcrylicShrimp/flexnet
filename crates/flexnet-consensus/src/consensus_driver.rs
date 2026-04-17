@@ -115,7 +115,7 @@ async fn driver_loop(
     consensus_config: Arc<ConsensusConfig>,
     mut message_port: impl MessagePort,
     block_port: impl BlockPort,
-    chain_port: impl ChainPort,
+    mut chain_port: impl ChainPort,
     mut stop_signal: Receiver<()>,
 ) {
     let mut next_timeout: Option<Timeout> = None;
@@ -132,7 +132,7 @@ async fn driver_loop(
             timeout: &mut next_timeout,
             message_port: &mut message_port,
             proposal_generator: &proposal_generator,
-            chain_port: &chain_port,
+            chain_port: &mut chain_port,
         },
         &mut state_machine,
     );
@@ -173,7 +173,7 @@ async fn driver_loop(
                 timeout: &mut next_timeout,
                 message_port: &mut message_port,
                 proposal_generator: &proposal_generator,
-                chain_port: &chain_port,
+                chain_port: &mut chain_port,
             },
             &mut state_machine,
         );

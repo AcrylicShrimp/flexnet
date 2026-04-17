@@ -29,7 +29,7 @@ where
     pub timeout: &'a mut Option<Timeout>,
     pub message_port: &'a mut M,
     pub proposal_generator: &'a ProposalGenerator<B>,
-    pub chain_port: &'a C,
+    pub chain_port: &'a mut C,
 }
 
 pub fn run_state_machine<'a, M, B, C>(
