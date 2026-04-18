@@ -3,6 +3,7 @@ use flexnet_chain::chain_config::ChainConfig;
 
 pub trait ProposalValidator<P>
 where
+    Self: 'static + Send + Sync,
     P: Proposal,
 {
     fn validate(

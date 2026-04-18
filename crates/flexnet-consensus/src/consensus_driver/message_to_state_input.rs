@@ -1,21 +1,23 @@
 use crate::{
     consensus_config::ConsensusConfig,
-    consensus_driver::{
-        proposal_block::ProposalBlock, proposal_block_validator::ProposalBlockValidator,
-    },
+    consensus_driver::proposal_block::ProposalBlock,
     justification::{Evidence, Justification},
     message::{Message, MessageVerificationError},
+    proposal_validator::ProposalValidator,
     state_input::StateInput,
     state_machine::StateMachine,
 };
 use flexnet_chain::chain_config::ChainConfig;
 
-pub fn message_to_state_input(
+pub fn message_to_state_input<V>(
     message: Message,
-    state_machine: &StateMachine<ProposalBlock, ProposalBlockValidator>,
+    state_machine: &StateMachine<ProposalBlock, V>,
     chain_config: &ChainConfig,
     consensus_config: &ConsensusConfig,
-) -> Result<StateInput<ProposalBlock>, MessageVerificationError> {
+) -> Result<StateInput<ProposalBlock>, MessageVerificationError>
+where
+    V: ProposalValidator<ProposalBlock>,
+{
     match message.verify_stateless(
         &state_machine.compute_proposer(),
         chain_config,

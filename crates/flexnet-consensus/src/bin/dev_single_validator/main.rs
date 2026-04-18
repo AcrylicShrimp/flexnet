@@ -1,3 +1,4 @@
+mod chain_proposal_validator;
 mod in_memory_state;
 mod interactive_block_port;
 mod no_op_message_port;
@@ -5,9 +6,9 @@ mod validating_block_port;
 mod validating_chain_port;
 
 use crate::{
-    in_memory_state::InMemoryState, interactive_block_port::InteractiveInfiniteBlockPort,
-    no_op_message_port::NoOpMessagePort, validating_block_port::ValidatingBlockPort,
-    validating_chain_port::ValidatingChainPort,
+    chain_proposal_validator::ChainProposalValidator, in_memory_state::InMemoryState,
+    interactive_block_port::InteractiveInfiniteBlockPort, no_op_message_port::NoOpMessagePort,
+    validating_block_port::ValidatingBlockPort, validating_chain_port::ValidatingChainPort,
 };
 use flexnet_chain::{
     chain::Chain,
@@ -41,6 +42,7 @@ async fn main() {
     let genesis = Genesis::new(chain_config.clone(), InMemoryState::new(), vec![address]);
     let chain = Arc::new(Mutex::new(Chain::new(genesis)));
 
+    let proposal_validator = ChainProposalValidator::new(chain.clone());
     let message_port = NoOpMessagePort::new();
     let block_port = ValidatingBlockPort::new(chain.clone());
     let chain_port = ValidatingChainPort::new(chain);
@@ -52,7 +54,13 @@ async fn main() {
     println!("Starting consensus driver...");
 
     driver
-        .run(1, message_port, interactive_block_port, chain_port)
+        .run(
+            1,
+            proposal_validator,
+            message_port,
+            interactive_block_port,
+            chain_port,
+        )
         .expect("failed to start consensus driver");
 
     println!("Consensus driver started");

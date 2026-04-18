@@ -4,12 +4,12 @@ use crate::{
         make_messages::{make_precommit_message, make_prevote_message},
         message_to_state_input::message_to_state_input,
         proposal_block::ProposalBlock,
-        proposal_block_validator::ProposalBlockValidator,
         proposal_generator::ProposalGenerator,
         timeout::Timeout,
     },
     message::Message,
     ports::{block_port::BlockPort, chain_port::ChainPort, message_port::MessagePort},
+    proposal_validator::ProposalValidator,
     state_input::StateInput,
     state_machine::StateMachine,
     state_output::StateOutput,
@@ -32,11 +32,12 @@ where
     pub chain_port: &'a mut C,
 }
 
-pub fn run_state_machine<'a, M, B, C>(
+pub fn run_state_machine<'a, V, M, B, C>(
     input: StateInput<ProposalBlock>,
     context: StateMachineExecutionContext<'a, M, B, C>,
-    state_machine: &mut StateMachine<ProposalBlock, ProposalBlockValidator>,
+    state_machine: &mut StateMachine<ProposalBlock, V>,
 ) where
+    V: ProposalValidator<ProposalBlock>,
     M: MessagePort,
     B: BlockPort,
     C: ChainPort,

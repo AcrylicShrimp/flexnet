@@ -1,7 +1,7 @@
+pub mod proposal_block;
+
 mod make_messages;
 mod message_to_state_input;
-mod proposal_block;
-mod proposal_block_validator;
 mod proposal_generator;
 mod run_state_machine;
 mod timeout;
@@ -11,13 +11,13 @@ use crate::{
     consensus_driver::{
         message_to_state_input::message_to_state_input,
         proposal_block::ProposalBlock,
-        proposal_block_validator::ProposalBlockValidator,
         proposal_generator::ProposalGenerator,
         run_state_machine::{StateMachineExecutionContext, run_state_machine},
         timeout::{Timeout, conditional_timeout},
     },
     message::Message,
     ports::{block_port::BlockPort, chain_port::ChainPort, message_port::MessagePort},
+    proposal_validator::ProposalValidator,
     state_input::StateInput,
     state_machine::{StateMachine, StateMachineInitError},
 };
@@ -64,6 +64,7 @@ impl ConsensusDriver {
     pub fn run(
         &mut self,
         height: u128,
+        proposal_validator: impl ProposalValidator<ProposalBlock>,
         message_port: impl MessagePort,
         block_port: impl BlockPort,
         chain_port: impl ChainPort,
@@ -78,7 +79,7 @@ impl ConsensusDriver {
             StateMachine::new(
                 self.chain_config.clone(),
                 self.consensus_config.clone(),
-                ProposalBlockValidator,
+                proposal_validator,
             )?,
             self.chain_config.clone(),
             self.consensus_config.clone(),
@@ -108,16 +109,18 @@ impl ConsensusDriver {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn driver_loop(
+async fn driver_loop<V>(
     initial_height: u128,
-    mut state_machine: StateMachine<ProposalBlock, ProposalBlockValidator>,
+    mut state_machine: StateMachine<ProposalBlock, V>,
     chain_config: Arc<ChainConfig>,
     consensus_config: Arc<ConsensusConfig>,
     mut message_port: impl MessagePort,
     block_port: impl BlockPort,
     mut chain_port: impl ChainPort,
     mut stop_signal: Receiver<()>,
-) {
+) where
+    V: ProposalValidator<ProposalBlock>,
+{
     let mut next_timeout: Option<Timeout> = None;
     let (proposal_generator, mut proposal_receiver) =
         ProposalGenerator::new(block_port, consensus_config.clone());
