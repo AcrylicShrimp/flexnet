@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 use crate::address::Address;
 use ed25519_dalek::{SECRET_KEY_LENGTH, SIGNATURE_LENGTH, Signer, SigningKey, VerifyingKey};
 use rand::rngs::ThreadRng;
@@ -21,7 +23,7 @@ impl SecretKey {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Signature([u8; SIGNATURE_LENGTH]);
 
 impl Signature {
@@ -31,6 +33,18 @@ impl Signature {
 
     pub const fn as_bytes(&self) -> &[u8; SIGNATURE_LENGTH] {
         &self.0
+    }
+}
+
+impl Display for Signature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
+impl Debug for Signature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Signature({})", self)
     }
 }
 

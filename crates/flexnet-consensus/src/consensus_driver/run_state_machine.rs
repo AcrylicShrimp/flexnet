@@ -33,6 +33,7 @@ where
 }
 
 pub fn run_state_machine<'a, V, M, B, C>(
+    name: impl AsRef<str>,
     input: StateInput<ProposalBlock>,
     context: StateMachineExecutionContext<'a, M, B, C>,
     state_machine: &mut StateMachine<ProposalBlock, V>,
@@ -42,11 +43,13 @@ pub fn run_state_machine<'a, V, M, B, C>(
     B: BlockPort,
     C: ChainPort,
 {
-    println!("input: {:#?}", input);
+    let name = name.as_ref();
+
+    println!("[{name}] input: {:#?}", input);
 
     let mut outputs = state_machine.step(input);
 
-    println!("outputs: {:#?}", outputs);
+    println!("[{name}] outputs: {:#?}", outputs);
 
     while !outputs.is_empty() {
         let mut next_outputs = vec![];
@@ -159,7 +162,7 @@ pub fn run_state_machine<'a, V, M, B, C>(
             }
         }
 
-        println!("next_outputs: {:#?}", next_outputs);
+        println!("[{name}] next_outputs: {:#?}", next_outputs);
 
         outputs = next_outputs;
     }

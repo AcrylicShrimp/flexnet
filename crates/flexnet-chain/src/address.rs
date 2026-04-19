@@ -1,6 +1,6 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Address([u8; 32]);
 
 impl Address {
@@ -16,6 +16,12 @@ impl Address {
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{}", hex::encode(self.as_bytes()))
+    }
+}
+
+impl Debug for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Address({})", self)
     }
 }
 

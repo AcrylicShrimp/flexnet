@@ -36,6 +36,7 @@ struct JobContext {
 }
 
 pub struct ConsensusDriver {
+    name: String,
     chain_config: Arc<ChainConfig>,
     consensus_config: Arc<ConsensusConfig>,
     job_context: Option<JobContext>,
@@ -50,11 +51,16 @@ pub enum ConsensusDriverStartError {
 }
 
 impl ConsensusDriver {
-    pub fn new(chain_config: ChainConfig, consensus_config: ConsensusConfig) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        chain_config: ChainConfig,
+        consensus_config: ConsensusConfig,
+    ) -> Self {
         let chain_config = Arc::new(chain_config);
         let consensus_config = Arc::new(consensus_config);
 
         Self {
+            name: name.into(),
             chain_config,
             consensus_config,
             job_context: None,
@@ -73,8 +79,10 @@ impl ConsensusDriver {
             return Err(ConsensusDriverStartError::AlreadyRunning);
         }
 
+        let name = self.name.clone();
         let (stop_signal_sender, stop_signal_receiver) = tokio::sync::mpsc::channel(1);
         let join_handle = tokio::spawn(driver_loop(
+            name,
             height,
             StateMachine::new(
                 self.chain_config.clone(),
@@ -110,6 +118,7 @@ impl ConsensusDriver {
 
 #[allow(clippy::too_many_arguments)]
 async fn driver_loop<V>(
+    name: String,
     initial_height: u128,
     mut state_machine: StateMachine<ProposalBlock, V>,
     chain_config: Arc<ChainConfig>,
@@ -126,6 +135,7 @@ async fn driver_loop<V>(
         ProposalGenerator::new(block_port, consensus_config.clone());
 
     run_state_machine(
+        &name,
         StateInput::StartHeight {
             height: initial_height,
         },
@@ -143,6 +153,7 @@ async fn driver_loop<V>(
     loop {
         let state_input = select! {
             Some(proposal) = proposal_receiver.recv() => {
+                let _ = message_port.sender().send(Message::Propose(proposal.clone())).await;
                 message_to_state_input(Message::Propose(proposal), &state_machine, &chain_config, &consensus_config).ok()
             }
             Some(message) = message_port.receiver().recv() => {
@@ -169,6 +180,7 @@ async fn driver_loop<V>(
         };
 
         run_state_machine(
+            &name,
             state_input,
             StateMachineExecutionContext {
                 chain_config: &chain_config,

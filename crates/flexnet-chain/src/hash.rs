@@ -6,9 +6,9 @@ use crate::{
     transaction::Transaction,
 };
 use sha2::{Digest, Sha256};
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hash([u8; 32]);
 
 impl Hash {
@@ -30,6 +30,12 @@ impl Hash {
 impl Display for Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
+impl Debug for Hash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Hash({})", self)
     }
 }
 

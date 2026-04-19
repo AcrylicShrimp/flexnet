@@ -25,7 +25,6 @@ where
     ) {
         Ok(_) => {}
         Err(err) => {
-            println!("Message verification failed: {:?}", err);
             return Err(err);
         }
     };

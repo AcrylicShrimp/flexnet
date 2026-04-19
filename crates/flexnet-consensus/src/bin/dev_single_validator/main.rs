@@ -49,7 +49,7 @@ async fn main() {
 
     let (interactive_block_port, mut wait_for_interaction) =
         InteractiveInfiniteBlockPort::new(block_port);
-    let mut driver = ConsensusDriver::new(chain_config, consensus_config);
+    let mut driver = ConsensusDriver::new("val", chain_config, consensus_config);
 
     println!("Starting consensus driver...");
 
