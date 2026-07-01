@@ -156,7 +156,13 @@ async fn driver_loop<V>(
     loop {
         let state_input = select! {
             Some(proposal) = proposal_receiver.recv() => {
-                let _ = message_port.sender().send(Message::Propose(proposal.clone())).await;
+                let sender = message_port.sender().clone();
+                let outbound = Message::Propose(proposal.clone());
+
+                tokio::spawn(async move {
+                    let _ = sender.send(outbound).await;
+                });
+
                 message_to_state_input(Message::Propose(proposal), &state_machine, &chain_config, &consensus_config).ok()
             }
             Some(message) = message_port.receiver().recv() => {
