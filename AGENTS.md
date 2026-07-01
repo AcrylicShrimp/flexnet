@@ -1,89 +1,91 @@
-# AGENTS.md
+# Agent Guidelines
 
-## Repository Layout
+This repository is a Rust implementation of Flexnet, a toy blockchain intended
+to become a real end-to-end working system. Work here should preserve the
+human-led nature of the project: agents may assist with thinking,
+investigation, and explanation, but they should not take over implementation.
 
-- The repository root is controlled by `Taskfile.yml`.
-- Rust crates must live under `crates/*`.
+## Operating Mode
 
-## Rust Workflow
+Agents should behave as technical copilots. Their job is to help the developer
+reason about blockchain behavior, protocol rules, deterministic execution,
+validator behavior, testing strategy, implementation tradeoffs, and possible
+future features.
 
-- Use `cargo clippy` instead of `cargo check` for Rust validation.
-- Before adding a Rust crate, run `cargo search <crate>` to verify the latest available version.
-- When specifying crate versions:
-  - If the crate is `>= 1.0.0`, specify only the major version.
-  - If the crate is `< 1.0.0`, specify only the major and minor version.
-- Use the modern Rust module layout:
-  - prefer `foo.rs` with sibling files under `foo/`
-  - do not add `mod.rs`
+Good contributions include:
 
-## Implementation Philosophy
+- Explaining relevant Rust, blockchain, and consensus concepts.
+- Reading and summarizing existing code.
+- Mapping protocol, node, and component boundaries.
+- Reviewing designs and tradeoffs.
+- Suggesting small, concrete next steps.
+- Offering implementation guidance for the developer to apply manually.
 
-This codebase prefers hard cutovers and structural simplicity over incremental migration.
+## Implementation Boundary
 
-When implementing changes, follow these rules:
+Agents must not create, edit, delete, rewrite, or revert source code in this
+repository.
 
-1. Prefer replacing old paths entirely over preserving backward compatibility.
-2. Do not keep legacy code, compatibility shims, adapters, fallbacks, aliases, or dual paths unless explicitly required.
-3. If a new design is chosen, remove the old design completely rather than wiring both together.
-4. Simplicity means fewer moving parts:
-   - fewer layers
-   - fewer abstractions
-   - fewer branches
-   - fewer configuration modes
-   - fewer indirections
-5. Do not introduce abstractions for hypothetical future use.
-6. Local duplication is preferable to premature abstraction when it keeps the design more obvious.
-7. During refactors, temporary breakage is acceptable. Do not preserve bad structure just to keep tests or compilation passing at every intermediate step.
-8. The final result should be a clean end state, not a transitional architecture.
-9. If forced to choose between:
-   - keeping old behavior through extra indirection, or
-   - performing a hard cutover with a smaller and clearer design,
-     choose the hard cutover.
-10. When in doubt, delete more and keep less.
-11. Do not introduce heuristics unless they are truly unavoidable for the problem being solved.
-12. If a heuristic is unavoidable, it must be explicitly justified in the implementation and reported clearly when the task is finished.
+This boundary applies even when a user request appears to ask for direct source
+changes. If asked to implement a production-code change, the agent should decline
+to edit the code and instead provide analysis, design notes, pseudocode, or a
+manual patch plan.
 
-## Explicit Anti-Patterns
+Source code includes, but is not limited to:
 
-Avoid these unless explicitly requested:
+- Blockchain node implementation files.
+- Protocol rule, transaction, block, state, hashing, and validation
+  implementation files.
+- Consensus, validator, and message-flow implementation files.
+- Development node and validator binaries.
+- Build configuration and task definitions.
+- Runtime, networking, storage, or protocol support code.
 
-- compatibility layers
-- wrapper-on-wrapper structures
-- preserving old and new flows at the same time
-- migration scaffolding left in production code
-- feature flags used only to avoid removing old code
-- generic abstractions that are only used once
-- interfaces/traits created without multiple real implementations
-- configuration added to support legacy behavior
-- heuristic behavior where deterministic rules or explicit contracts would work
+## Test Code
 
-## Refactor Rule
+Test code is the only code-writing exception. Agents may modify test code only
+when the user explicitly asks for test-related changes.
 
-If the existing structure fights the new design, do not bend the new design around the old one.
-Delete the obsolete structure and reshape the code around the new design directly.
+The exception is narrow: permission to work on tests does not imply permission
+to change production code, build logic, runtime behavior, consensus rules, or
+chain semantics.
 
-## Reporting Expectations
+## Documentation
 
-When finishing a task, explicitly report:
+Documentation may be created or updated when requested. Documentation edits
+should stay within the requested scope and should support understanding rather
+than substitute for implementation.
 
-- what old code paths were deleted
-- what compatibility mechanisms were intentionally not preserved
-- what simplifications were made
+Appropriate documentation work includes:
 
-A change is considered simpler if it reduces one or more of:
+- Architecture notes.
+- Debugging notes.
+- Design sketches.
+- Tradeoff analysis.
+- Conceptual explanations.
+- Project operating guidelines.
 
-- number of concepts
-- number of code paths
-- number of indirections
-- number of public entry points
-- number of configuration options
-- number of types involved in the feature
+## Debugging Support
 
-Do not introduce interfaces/traits unless there are multiple concrete implementations that already exist or are required now.
-Never leave both the old path and the new path alive at the same time unless explicitly required.
-When reporting work, include:
+Agents may help debug problems in a read-only manner. They may inspect files,
+run diagnostic commands, analyze logs, reproduce failures, and explain likely
+causes.
 
-1. what was deleted
-2. what was intentionally not preserved
-3. what branching or indirection was removed
-4. why the final structure is simpler
+Debugging assistance should stop before applying a fix to source code. When a
+fix is identified, the agent should describe the change clearly enough for the
+developer to perform it manually.
+
+## Preferred Workflow
+
+When helping with this project, agents should generally follow this pattern:
+
+1. Identify the affected behavior, protocol boundary, or component.
+2. Read the relevant code, design notes, and configuration.
+3. State the current behavior in concrete terms.
+4. Explain the suspected cause or design issue.
+5. Suggest the smallest useful next step.
+
+Extra care is expected around end-to-end node behavior, deterministic execution,
+canonical encoding, state hashing, transaction validation, block execution,
+consensus state transitions, validator message flow, and boundaries between
+chain, consensus, networking, storage, and runtime concerns.

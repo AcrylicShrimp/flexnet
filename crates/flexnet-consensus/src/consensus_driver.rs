@@ -18,6 +18,7 @@ use crate::{
     message::Message,
     ports::{block_port::BlockPort, chain_port::ChainPort, message_port::MessagePort},
     proposal_validator::ProposalValidator,
+    session_input_buffer::SessionInputBuffer,
     state_input::StateInput,
     state_machine::{StateMachine, StateMachineInitError},
 };
@@ -150,6 +151,8 @@ async fn driver_loop<V>(
         &mut state_machine,
     );
 
+    let mut input_buffer = SessionInputBuffer::new(consensus_config.input_queue_size);
+
     loop {
         let state_input = select! {
             Some(proposal) = proposal_receiver.recv() => {
@@ -179,18 +182,31 @@ async fn driver_loop<V>(
             }
         };
 
-        run_state_machine(
-            &name,
-            state_input,
-            StateMachineExecutionContext {
-                chain_config: &chain_config,
-                consensus_config: &consensus_config,
-                timeout: &mut next_timeout,
-                message_port: &mut message_port,
-                proposal_generator: &proposal_generator,
-                chain_port: &mut chain_port,
-            },
-            &mut state_machine,
-        );
+        input_buffer.push(state_input);
+
+        loop {
+            let (height, round) = state_machine.position();
+            let inputs = input_buffer.pop(height, round);
+
+            if inputs.is_empty() {
+                break;
+            }
+
+            for input in inputs {
+                run_state_machine(
+                    &name,
+                    input,
+                    StateMachineExecutionContext {
+                        chain_config: &chain_config,
+                        consensus_config: &consensus_config,
+                        timeout: &mut next_timeout,
+                        message_port: &mut message_port,
+                        proposal_generator: &proposal_generator,
+                        chain_port: &mut chain_port,
+                    },
+                    &mut state_machine,
+                );
+            }
+        }
     }
 }

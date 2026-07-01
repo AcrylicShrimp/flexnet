@@ -41,6 +41,14 @@ impl Message {
         }
     }
 
+    pub fn position(&self) -> (u128, u32) {
+        match self {
+            Message::Propose(msg) => (msg.payload.height, msg.payload.round),
+            Message::Prevote(msg) => (msg.payload.height, msg.payload.round),
+            Message::Precommit(msg) => (msg.payload.height, msg.payload.round),
+        }
+    }
+
     pub fn encoded_len(&self) -> usize {
         let kind = 1;
         let msg = match self {
@@ -90,13 +98,13 @@ impl Message {
 
     pub fn verify_stateless(
         &self,
-        current_proposer: &Address,
+        proposer: &Address,
         chain_config: &ChainConfig,
         consensus_config: &ConsensusConfig,
     ) -> Result<(), MessageVerificationError> {
         match self {
             Message::Propose(msg) => {
-                verify_propose_stateless(msg, current_proposer, chain_config, consensus_config)?;
+                verify_propose_stateless(msg, proposer, chain_config, consensus_config)?;
             }
             Message::Prevote(msg) => {
                 verify_prevote_stateless(msg, consensus_config)?;

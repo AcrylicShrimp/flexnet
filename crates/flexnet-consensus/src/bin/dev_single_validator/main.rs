@@ -32,7 +32,7 @@ async fn main() {
     let address = address_from_secret_key(&secret_key);
 
     let chain_config = ChainConfig::new(ChainId::new(1), ChainVersion::new(1), 128);
-    let consensus_config = ConsensusConfig::new(secret_key, vec![address], 1, 50000000);
+    let consensus_config = ConsensusConfig::new(secret_key, vec![address], 1, 50000000, 128);
 
     println!("Starting consensus driver with a single validator");
     println!("Validator address: {}", address);

@@ -51,14 +51,14 @@ pub enum ProposeVerificationError {
 
 pub fn verify_propose_stateless(
     msg: &MsgPropose,
-    current_proposer: &Address,
+    proposer: &Address,
     chain_config: &ChainConfig,
     consensus_config: &ConsensusConfig,
 ) -> Result<(), ProposeVerificationError> {
-    if &msg.payload.address != current_proposer {
+    if &msg.payload.address != proposer {
         return Err(ProposeVerificationError::NotCurrentProposer {
             actual: msg.payload.address,
-            expected: *current_proposer,
+            expected: *proposer,
         });
     }
 

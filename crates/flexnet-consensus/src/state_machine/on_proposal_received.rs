@@ -17,13 +17,7 @@ where
         proposal: P,
         justification: Option<Justification>,
     ) -> Vec<StateOutput<P>> {
-        if self.is_older(height, round) {
-            // proposal is behind the current round; ignore input
-            return vec![];
-        }
-
-        if self.is_newer(height, round) {
-            // TODO: support out-of-order inputs later
+        if !self.is_same(height, round) {
             return vec![];
         }
 
@@ -43,7 +37,7 @@ where
             return self.prevote(None);
         }
 
-        let proposal_hash = proposal.hash();
+        let proposal_hash = Proposal::hash(&proposal);
 
         // try to accept a new polka candidate if a justification is provided.
         if let Some(justification) = &justification {

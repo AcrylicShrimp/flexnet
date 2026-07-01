@@ -10,6 +10,7 @@ pub mod ports;
 pub mod proposal;
 pub mod proposal_validator;
 pub mod rules;
+pub mod session_input_buffer;
 pub mod state;
 pub mod state_input;
 pub mod state_machine;

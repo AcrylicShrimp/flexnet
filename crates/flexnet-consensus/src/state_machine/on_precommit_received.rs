@@ -26,13 +26,7 @@ where
         proposal_hash: Option<Hash>,
         signature: Signature,
     ) -> Vec<StateOutput<P>> {
-        if self.is_older(height, round) {
-            // precommit is behind the current round; ignore input
-            return vec![];
-        }
-
-        if self.is_newer(height, round) {
-            // TODO: support out-of-order inputs later
+        if !self.is_same(height, round) {
             return vec![];
         }
 

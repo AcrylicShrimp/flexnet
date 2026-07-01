@@ -37,7 +37,7 @@ async fn main() {
     let chain_config = ChainConfig::new(ChainId::new(1), ChainVersion::new(1), 128);
     let consensus_configs = secrets
         .into_iter()
-        .map(|secret| ConsensusConfig::new(secret, addresses.clone(), 3, 15000))
+        .map(|secret| ConsensusConfig::new(secret, addresses.clone(), 3, 15000, 128))
         .collect::<Vec<_>>();
 
     for (index, consensus_config) in consensus_configs.into_iter().enumerate() {

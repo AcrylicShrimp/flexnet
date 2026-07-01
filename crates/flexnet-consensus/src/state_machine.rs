@@ -3,8 +3,6 @@ mod on_prevote_received;
 mod on_proposal_received;
 mod on_start_round;
 
-use std::sync::Arc;
-
 use crate::{
     consensus_config::ConsensusConfig,
     lock::Lock,
@@ -17,6 +15,7 @@ use crate::{
     vote_set::VoteSet,
 };
 use flexnet_chain::{address::Address, chain_config::ChainConfig};
+use std::sync::Arc;
 use thiserror::Error;
 
 pub struct StateMachine<P, V>
@@ -75,10 +74,17 @@ where
         })
     }
 
+    pub fn position(&self) -> (u128, u32) {
+        (self.height, self.round)
+    }
+
     pub fn compute_proposer(&self) -> Address {
+        self.compute_expected_proposer_at(self.height, self.round)
+    }
+
+    pub fn compute_expected_proposer_at(&self, height: u128, round: u32) -> Address {
         let validators_len = self.consensus_config.validators.len() as u128;
-        let proposer_index = (((self.height % validators_len)
-            + (self.round as u128 % validators_len))
+        let proposer_index = (((height % validators_len) + (round as u128 % validators_len))
             % validators_len) as usize;
         self.consensus_config.validators[proposer_index]
     }
@@ -89,10 +95,6 @@ where
 
     pub(crate) fn is_same(&self, height: u128, round: u32) -> bool {
         (height, round) == (self.height, self.round)
-    }
-
-    pub(crate) fn is_newer(&self, height: u128, round: u32) -> bool {
-        (height, round) > (self.height, self.round)
     }
 
     /// Accepts a new lock candidate if it is better than the current lock.

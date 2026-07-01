@@ -1,7 +1,7 @@
 use crate::{justification::Justification, proposal::Proposal};
 use flexnet_chain::{address::Address, crypto::Signature, hash::Hash};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum StateInput<P>
 where
     P: Proposal,

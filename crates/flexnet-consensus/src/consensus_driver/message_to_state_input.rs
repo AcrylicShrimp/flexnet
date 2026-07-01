@@ -18,8 +18,10 @@ pub fn message_to_state_input<V>(
 where
     V: ProposalValidator<ProposalBlock>,
 {
+    let (height, round) = message.position();
+
     match message.verify_stateless(
-        &state_machine.compute_proposer(),
+        &state_machine.compute_expected_proposer_at(height, round),
         chain_config,
         consensus_config,
     ) {
