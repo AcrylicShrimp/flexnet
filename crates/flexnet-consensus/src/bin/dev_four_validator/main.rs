@@ -6,7 +6,7 @@ mod validating_block_port;
 mod validating_chain_port;
 mod validator_node;
 
-use crate::in_memory_network::InMemoryNetwork;
+use crate::in_memory_network::{InMemoryNetwork, NetworkFaults};
 use flexnet_chain::{
     chain_config::ChainConfig,
     chain_id::ChainId,
@@ -19,7 +19,12 @@ use flexnet_consensus::consensus_config::ConsensusConfig;
 async fn main() {
     println!("Starting 4-validator network");
 
-    let mut network = InMemoryNetwork::new();
+    let mut network = InMemoryNetwork::new(NetworkFaults {
+        // drop_rate: 0.05,
+        drop_rate: 0.0,
+        max_delay_ms: 7000,
+        duplicate_rate: 0.1,
+    });
 
     let secrets = vec![
         SecretKey::generate_random(),
@@ -37,7 +42,7 @@ async fn main() {
     let chain_config = ChainConfig::new(ChainId::new(1), ChainVersion::new(1), 128);
     let consensus_configs = secrets
         .into_iter()
-        .map(|secret| ConsensusConfig::new(secret, addresses.clone(), 3, 15000, 128))
+        .map(|secret| ConsensusConfig::new(secret, addresses.clone(), 3, 10000, 128))
         .collect::<Vec<_>>();
 
     for (index, consensus_config) in consensus_configs.into_iter().enumerate() {

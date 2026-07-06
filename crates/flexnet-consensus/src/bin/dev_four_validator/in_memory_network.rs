@@ -1,21 +1,33 @@
+use std::time::Duration;
+
 use crate::validator_node::ValidatorNode;
 use flexnet_chain::{address::Address, chain_config::ChainConfig};
 use flexnet_consensus::{
     consensus_config::ConsensusConfig, consensus_driver::ConsensusDriverStartError,
     message::Message,
 };
-use tokio::task::JoinHandle;
+use rand::{random_bool, random_range};
+use tokio::{task::JoinHandle, time::sleep};
 
 pub struct InMemoryNetwork {
     validators: Vec<ValidatorNode>,
     join_handles: Option<Vec<JoinHandle<()>>>,
+    faults: NetworkFaults,
+}
+
+#[derive(Clone)]
+pub struct NetworkFaults {
+    pub drop_rate: f64,
+    pub max_delay_ms: u64,
+    pub duplicate_rate: f64,
 }
 
 impl InMemoryNetwork {
-    pub fn new() -> Self {
+    pub fn new(faults: NetworkFaults) -> Self {
         Self {
             validators: vec![],
             join_handles: None,
+            faults,
         }
     }
 
@@ -53,6 +65,8 @@ impl InMemoryNetwork {
             validator.run(height, val2net_without_addr_tx, net2val_rx)?;
         }
 
+        let faults = self.faults.clone();
+
         let join_handle = tokio::spawn(async move {
             while let Some((tx_address, message)) = val2net_rx.recv().await {
                 for (rx_address, tx) in &net2val_tx_with_addresses {
@@ -60,7 +74,26 @@ impl InMemoryNetwork {
                         continue;
                     }
 
-                    let _ = tx.send(message.clone()).await;
+                    if random_bool(faults.drop_rate) {
+                        continue;
+                    }
+
+                    let tx = tx.clone();
+                    let message = message.clone();
+
+                    tokio::spawn(async move {
+                        let delay_ms = random_range(0..=faults.max_delay_ms);
+
+                        if delay_ms != 0 {
+                            sleep(Duration::from_millis(delay_ms)).await;
+                        }
+
+                        let _ = tx.send(message.clone()).await;
+
+                        if random_bool(faults.duplicate_rate) {
+                            let _ = tx.send(message).await;
+                        }
+                    });
                 }
             }
         });
