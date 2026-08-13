@@ -4,7 +4,7 @@ use crate::{
     chain_id::ChainId,
     chain_version::ChainVersion,
     hash::{Hash, compute_state_hash_from_delta},
-    state::{StateDelta, StateView},
+    state::{StateDelta, StateDeltaOverlay, StateView},
     transaction::{Transaction, TransactionExecutionError, TransactionVerificationError},
 };
 use thiserror::Error;
@@ -133,7 +133,7 @@ where
 
     for (index, transaction) in transactions.iter().enumerate() {
         let delta = transaction
-            .execute(config, state)
+            .execute(config, &StateDeltaOverlay::new(state, &state_delta))
             .map_err(|error| BlockExecutionError::TxExecuteError { index, error })?;
         state_delta = StateDelta::merge(state_delta, delta);
     }
