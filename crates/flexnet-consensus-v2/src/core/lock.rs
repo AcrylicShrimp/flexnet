@@ -1,0 +1,9 @@
+use flexnet_chain::hash::Hash;
+
+/// The matching validated block must be retained outside the core for the
+/// remainder of this height.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CoreLock {
+    pub locked_round: u64,
+    pub block_hash: Hash,
+}

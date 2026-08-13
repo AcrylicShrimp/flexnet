@@ -6,6 +6,7 @@ members = ["crates/*"]
 ed25519-dalek = "3.0.0-pre.6"
 flexnet-chain = { path = "crates/flexnet-chain" }
 flexnet-consensus = { path = "crates/flexnet-consensus" }
+flexnet-consensus-v2 = { path = "crates/flexnet-consensus-v2" }
 hex = "0.4"
 parking_lot = "0.12"
 rand = "0.10"
