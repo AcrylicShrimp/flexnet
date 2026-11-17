@@ -1,10 +1,10 @@
 use flexnet_chain::{
     address::Address,
-    crypto::{SecretKey, address_from_secret_key},
+    crypto::{Ed25519SecretKey, address_from_secret_key},
 };
 
 pub struct ConsensusConfig {
-    pub secret_key: SecretKey,
+    pub secret_key: Ed25519SecretKey,
     pub address: Address,
     pub validators: Vec<Address>,
     pub quorum: usize,
@@ -14,7 +14,7 @@ pub struct ConsensusConfig {
 
 impl ConsensusConfig {
     pub fn new(
-        secret_key: SecretKey,
+        secret_key: Ed25519SecretKey,
         validators: Vec<Address>,
         quorum: usize,
         round_timeout_ms: u64,

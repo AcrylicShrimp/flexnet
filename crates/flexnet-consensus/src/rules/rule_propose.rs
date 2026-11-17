@@ -9,7 +9,7 @@ use flexnet_chain::{
     address::Address,
     chain_config::ChainConfig,
     crypto::VerificationError,
-    hash::{Hash, compute_block_hash},
+    hash::{Hash256, compute_block_hash},
     rules::rule_block::{BlockVerificationError, verify_block_stateless},
 };
 use std::collections::BTreeSet;
@@ -37,7 +37,7 @@ pub enum ProposeVerificationError {
         evidence_count: usize,
     },
     #[error("justification proposal hash mismatch: expected {expected}, got {actual}")]
-    InvalidJustificationProposalHash { expected: Hash, actual: Hash },
+    InvalidJustificationProposalHash { expected: Hash256, actual: Hash256 },
     #[error("evidence at {index} address {address} is duplicated")]
     DuplicateEvidence { index: usize, address: Address },
     #[error("evidence at {index} address {address} is not a validator")]

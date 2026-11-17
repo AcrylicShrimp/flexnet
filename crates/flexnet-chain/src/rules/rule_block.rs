@@ -3,7 +3,7 @@ use crate::{
     chain_config::ChainConfig,
     chain_id::ChainId,
     chain_version::ChainVersion,
-    hash::{Hash, compute_state_hash_from_delta},
+    hash::{Hash256, compute_state_hash_from_delta},
     state::{StateDelta, StateDeltaOverlay, StateView},
     transaction::{Transaction, TransactionExecutionError, TransactionVerificationError},
 };
@@ -34,7 +34,7 @@ pub enum BlockVerificationError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionOutcome {
     pub state_delta: StateDelta,
-    pub state_hash: Hash,
+    pub state_hash: Hash256,
 }
 
 pub fn verify_block_stateless(
@@ -56,7 +56,7 @@ pub fn verify_block_stateless(
     }
 
     if block.is_genesis() {
-        if block.previous_block_hash != Hash::ZERO {
+        if block.previous_block_hash != Hash256::ZERO {
             return Err(BlockVerificationError::InvalidGenesisPreviousBlockHash);
         }
 
@@ -92,7 +92,7 @@ pub enum BlockExecutionError {
         error: TransactionExecutionError,
     },
     #[error("invalid state hash: expected {expected}, got {actual}")]
-    InvalidStateHash { expected: Hash, actual: Hash },
+    InvalidStateHash { expected: Hash256, actual: Hash256 },
 }
 
 pub fn execute_block<S>(
@@ -153,8 +153,8 @@ mod tests {
         chain_config::ChainConfig,
         chain_id::ChainId,
         chain_version::ChainVersion,
-        crypto::{SecretKey, address_from_secret_key, sign},
-        hash::{Hash, compute_state_hash},
+        crypto::{Ed25519SecretKey, address_from_secret_key, sign},
+        hash::{Hash256, compute_state_hash},
         state::{StateDelta, StateView, WritableState},
         transaction::Transaction,
         transactions::tx_transfer::{TransferPayload, TxTransfer},
@@ -198,8 +198,8 @@ mod tests {
         }
     }
 
-    fn secret_key(seed: u8) -> SecretKey {
-        SecretKey::new([seed; 32])
+    fn secret_key(seed: u8) -> Ed25519SecretKey {
+        Ed25519SecretKey::new([seed; 32])
     }
 
     fn config() -> ChainConfig {
@@ -215,7 +215,7 @@ mod tests {
     }
 
     fn signed_transfer(
-        secret_key: &SecretKey,
+        secret_key: &Ed25519SecretKey,
         to: Address,
         amount: u128,
         nonce: u128,
@@ -246,8 +246,8 @@ mod tests {
             ChainId::new(1),
             ChainVersion::new(1),
             1,
-            Hash::ZERO,
-            Hash::ZERO,
+            Hash256::ZERO,
+            Hash256::ZERO,
             Vec::new(),
         );
         block.transactions = vec![repeated; u16::MAX as usize + 1];
@@ -293,7 +293,7 @@ mod tests {
             ChainId::new(1),
             ChainVersion::new(1),
             1,
-            Hash::ZERO,
+            Hash256::ZERO,
             compute_state_hash(&expected_state),
             vec![tx],
         );
@@ -317,8 +317,8 @@ mod tests {
             ChainId::new(1),
             ChainVersion::new(1),
             1,
-            Hash::ZERO,
-            Hash::ZERO,
+            Hash256::ZERO,
+            Hash256::ZERO,
             vec![tx],
         );
 

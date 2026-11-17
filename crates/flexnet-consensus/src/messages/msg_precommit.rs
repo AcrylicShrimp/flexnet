@@ -2,8 +2,8 @@ use crate::message_kind::MessageKind;
 use flexnet_chain::{
     address::Address,
     codec::{DecodeError, Decoder},
-    crypto::{Signature, VerificationError, verify},
-    hash::Hash,
+    crypto::{Ed25519Signature, VerificationError, verify},
+    hash::Hash256,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -11,11 +11,11 @@ pub struct PrecommitPayload {
     pub height: u128,
     pub round: u32,
     pub address: Address,
-    pub proposal_hash: Option<Hash>,
+    pub proposal_hash: Option<Hash256>,
 }
 
 impl PrecommitPayload {
-    pub fn new(height: u128, round: u32, address: Address, proposal_hash: Option<Hash>) -> Self {
+    pub fn new(height: u128, round: u32, address: Address, proposal_hash: Option<Hash256>) -> Self {
         Self {
             height,
             round,
@@ -54,11 +54,11 @@ impl PrecommitPayload {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MsgPrecommit {
     pub payload: PrecommitPayload,
-    pub signature: Signature,
+    pub signature: Ed25519Signature,
 }
 
 impl MsgPrecommit {
-    pub fn new(payload: PrecommitPayload, signature: Signature) -> Self {
+    pub fn new(payload: PrecommitPayload, signature: Ed25519Signature) -> Self {
         Self { payload, signature }
     }
 
@@ -117,11 +117,11 @@ impl MsgPrecommit {
         let address = Address::new(decoder.read_fixed::<32>()?);
         let proposal_hash_kind = decoder.read_u8_le()?;
         let proposal_hash = if proposal_hash_kind == 1 {
-            Some(Hash::new(decoder.read_fixed::<32>()?))
+            Some(Hash256::new(decoder.read_fixed::<32>()?))
         } else {
             None
         };
-        let signature = Signature::new(decoder.read_fixed::<64>()?);
+        let signature = Ed25519Signature::new(decoder.read_fixed::<64>()?);
 
         Ok(Self::new(
             PrecommitPayload::new(height, round, address, proposal_hash),

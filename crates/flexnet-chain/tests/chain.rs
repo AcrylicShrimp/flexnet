@@ -5,7 +5,7 @@ use flexnet_chain::{
     block::Block,
     chain::{Chain, ChainAppendError},
     genesis::Genesis,
-    hash::{Hash, compute_block_hash},
+    hash::{Hash256, compute_block_hash},
     rules::rule_block::BlockExecutionError,
     state::StateView,
 };
@@ -108,7 +108,7 @@ fn reject_invalid_block_without_mutating_chain() {
         chain.next_block_height().unwrap(),
         vec![tx],
     );
-    block.state_hash = Hash::ZERO;
+    block.state_hash = Hash256::ZERO;
 
     let error = chain.append_block(block).unwrap_err();
 
@@ -133,8 +133,8 @@ fn reject_previous_hash_mismatch_without_mutating_chain() {
         config().chain_id,
         config().chain_version,
         1,
-        Hash::new([9; 32]),
-        Hash::ZERO,
+        Hash256::new([9; 32]),
+        Hash256::ZERO,
         Vec::new(),
     );
 
@@ -144,7 +144,7 @@ fn reject_previous_hash_mismatch_without_mutating_chain() {
         error,
         ChainAppendError::PreviousBlockHashMismatch {
             expected: before.tip_block_hash(),
-            actual: Hash::new([9; 32]),
+            actual: Hash256::new([9; 32]),
         }
     );
     assert_eq!(chain, before);

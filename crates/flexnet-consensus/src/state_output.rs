@@ -1,5 +1,5 @@
 use crate::polka::Polka;
-use flexnet_chain::hash::Hash;
+use flexnet_chain::hash::Hash256;
 
 #[derive(Debug)]
 pub enum StateOutput<P> {
@@ -20,12 +20,12 @@ pub enum StateOutput<P> {
     Prevote {
         height: u128,
         round: u32,
-        proposal_hash: Option<Hash>,
+        proposal_hash: Option<Hash256>,
     },
     Precommit {
         height: u128,
         round: u32,
-        proposal_hash: Option<Hash>,
+        proposal_hash: Option<Hash256>,
     },
     Commit {
         height: u128,

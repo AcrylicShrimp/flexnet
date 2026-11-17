@@ -1,4 +1,4 @@
-use flexnet_chain::hash::Hash;
+use flexnet_chain::hash::Hash256;
 
 /// Hint that should be attached when the local validator proposes a block.
 ///
@@ -10,5 +10,5 @@ pub struct ProposalHint {
     /// Previous round in this height where `block_hash` had quorum prevotes.
     pub valid_round: u64,
     /// Block hash that should be re-proposed with `valid_round`.
-    pub block_hash: Hash,
+    pub block_hash: Hash256,
 }

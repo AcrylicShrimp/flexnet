@@ -5,13 +5,19 @@ use crate::{
     state::{StateDelta, StateDeltaOverlay, StateView},
     transaction::Transaction,
 };
+use flexnet_codec::{
+    canonical_decode::CanonicalDecode,
+    canonical_encode::CanonicalEncode,
+    decoder::{Decoder, DecoderError},
+    encoder::{Encoder, EncoderError},
+};
 use sha2::{Digest, Sha256};
 use std::fmt::{Debug, Display};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Hash([u8; 32]);
+struct Hash256([u8; 32]);
 
-impl Hash {
+impl Hash256 {
     pub const ZERO: Self = Self([0; 32]);
 
     pub const fn new(bytes: [u8; 32]) -> Self {
@@ -27,15 +33,72 @@ impl Hash {
     }
 }
 
-impl Display for Hash {
+impl Display for Hash256 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{}", hex::encode(self.0))
     }
 }
 
-impl Debug for Hash {
+impl Debug for Hash256 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Hash({})", self)
+    }
+}
+
+impl CanonicalEncode for Hash256 {
+    fn encode_to(&self, encoder: &mut Encoder) -> Result<(), EncoderError> {
+        encoder.write_fixed_bytes(&self.0);
+        Ok(())
+    }
+}
+
+impl CanonicalDecode for Hash256 {
+    fn decode_from(decoder: &mut Decoder) -> Result<Self, DecoderError> {
+        Ok(Self::new(*decoder.read_fixed_bytes()?))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct BlockHash(Hash256);
+
+impl Display for BlockHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", self.0)
+    }
+}
+
+impl CanonicalEncode for BlockHash {
+    fn encode_to(&self, encoder: &mut Encoder) -> Result<(), EncoderError> {
+        self.0.encode_to(encoder);
+        Ok(())
+    }
+}
+
+impl CanonicalDecode for BlockHash {
+    fn decode_from(decoder: &mut Decoder) -> Result<Self, DecoderError> {
+        Ok(Self(Hash256::decode_from(decoder)?))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StateHash(Hash256);
+
+impl Display for StateHash {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", self.0)
+    }
+}
+
+impl CanonicalEncode for StateHash {
+    fn encode_to(&self, encoder: &mut Encoder) -> Result<(), EncoderError> {
+        self.0.encode_to(encoder);
+        Ok(())
+    }
+}
+
+impl CanonicalDecode for StateHash {
+    fn decode_from(decoder: &mut Decoder) -> Result<Self, DecoderError> {
+        Ok(Self(Hash256::decode_from(decoder)?))
     }
 }
 
@@ -58,11 +121,15 @@ pub fn encode_transactions_hash_preimage(transactions: &[Transaction]) -> Vec<u8
     preimage
 }
 
-pub fn compute_transactions_hash(transactions: &[Transaction]) -> Hash {
-    Hash::compute(&encode_transactions_hash_preimage(transactions))
+pub fn compute_transactions_hash(transactions: &[Transaction]) -> Hash256 {
+    Hash256::compute(&encode_transactions_hash_preimage(transactions))
 }
 
-pub fn encode_state_hash_preimage(rolling: &Hash, address: &Address, account: &Account) -> Vec<u8> {
+pub fn encode_state_hash_preimage(
+    rolling: &Hash256,
+    address: &Address,
+    account: &Account,
+) -> Vec<u8> {
     let preimage_size = 32 + 32 + 16 + 16;
 
     let mut preimage = Vec::with_capacity(preimage_size);
@@ -73,34 +140,34 @@ pub fn encode_state_hash_preimage(rolling: &Hash, address: &Address, account: &A
     preimage
 }
 
-pub fn compute_state_hash<S>(state: &S) -> Hash
+pub fn compute_state_hash<S>(state: &S) -> Hash256
 where
     S: StateView,
 {
-    let mut rolling = Hash::ZERO;
+    let mut rolling = Hash256::ZERO;
 
     for (address, account) in state
         .all_accounts_in_order()
         .filter(|(_, account)| !account.is_empty())
     {
-        rolling = Hash::compute(&encode_state_hash_preimage(&rolling, &address, &account));
+        rolling = Hash256::compute(&encode_state_hash_preimage(&rolling, &address, &account));
     }
 
     rolling
 }
 
-pub fn compute_state_hash_from_delta<S>(state: &S, delta: &StateDelta) -> Hash
+pub fn compute_state_hash_from_delta<S>(state: &S, delta: &StateDelta) -> Hash256
 where
     S: StateView,
 {
-    let mut rolling = Hash::ZERO;
+    let mut rolling = Hash256::ZERO;
     let overlay = StateDeltaOverlay::new(state, delta);
 
     for (address, account) in overlay
         .all_accounts_in_order()
         .filter(|(_, account)| !account.is_empty())
     {
-        rolling = Hash::compute(&encode_state_hash_preimage(&rolling, &address, &account));
+        rolling = Hash256::compute(&encode_state_hash_preimage(&rolling, &address, &account));
     }
 
     rolling
@@ -120,14 +187,14 @@ pub fn encode_block_hash_preimage(block: &Block) -> Vec<u8> {
     preimage
 }
 
-pub fn compute_block_hash(block: &Block) -> Hash {
-    Hash::compute(&encode_block_hash_preimage(block))
+pub fn compute_block_hash(block: &Block) -> Hash256 {
+    Hash256::compute(&encode_block_hash_preimage(block))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Hash, compute_block_hash, compute_state_hash, compute_transactions_hash,
+        Hash256, compute_block_hash, compute_state_hash, compute_transactions_hash,
         encode_transactions_hash_preimage,
     };
     use crate::{
@@ -136,7 +203,7 @@ mod tests {
         block::Block,
         chain_id::ChainId,
         chain_version::ChainVersion,
-        crypto::{SecretKey, address_from_secret_key, sign},
+        crypto::{Ed25519SecretKey, address_from_secret_key, sign},
         state::{StateDelta, StateView, WritableState},
         transaction::Transaction,
         transactions::tx_transfer::{TransferPayload, TxTransfer},
@@ -185,7 +252,7 @@ mod tests {
     }
 
     fn transfer(seed: u8, to_seed: u8, amount: u128, nonce: u128) -> Transaction {
-        let secret_key = SecretKey::new([seed; 32]);
+        let secret_key = Ed25519SecretKey::new([seed; 32]);
         let from = address_from_secret_key(&secret_key);
         let to = Address::new([to_seed; 32]);
         let payload = TransferPayload::new(
@@ -220,7 +287,7 @@ mod tests {
         let preimage = encode_transactions_hash_preimage(&txs);
 
         assert_eq!(&preimage[..2], &2_u16.to_le_bytes());
-        assert_eq!(compute_transactions_hash(&txs), Hash::compute(&preimage));
+        assert_eq!(compute_transactions_hash(&txs), Hash256::compute(&preimage));
     }
 
     #[test]
@@ -229,7 +296,7 @@ mod tests {
             ChainId::new(1),
             ChainVersion::new(1),
             1,
-            Hash::ZERO,
+            Hash256::ZERO,
             compute_state_hash(&state_with_accounts(&[(
                 Address::new([1; 32]),
                 Account::new(10, 0),

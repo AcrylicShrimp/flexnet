@@ -3,7 +3,7 @@ mod shared;
 use flexnet_chain::{
     account::Account,
     block::Block,
-    hash::{Hash, compute_block_hash, compute_state_hash, compute_transactions_hash},
+    hash::{Hash256, compute_block_hash, compute_state_hash, compute_transactions_hash},
     rules::{
         rule_block::{BlockExecutionError, execute_block},
         rule_transfer::TransferExecutionError,
@@ -23,7 +23,7 @@ fn execute_block_matches_expected_hashes_and_state() {
     let carol = address_for(&carol_key);
     let previous_state =
         state_with_accounts(&[(alice, Account::new(1_000, 0)), (bob, Account::new(100, 0))]);
-    let previous_block_hash = Hash::new([7; 32]);
+    let previous_block_hash = Hash256::new([7; 32]);
     let tx1 = signed_transfer(&alice_key, bob, 150, 0);
     let tx2 = signed_transfer(&bob_key, carol, 75, 0);
     let expected_state = {
@@ -72,8 +72,8 @@ fn reject_block_when_any_transaction_is_invalid() {
         config().chain_id,
         config().chain_version,
         1,
-        Hash::ZERO,
-        Hash::ZERO,
+        Hash256::ZERO,
+        Hash256::ZERO,
         vec![tx1, tx2],
     );
 

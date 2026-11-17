@@ -3,7 +3,7 @@ use crate::{
     proposal_validator::ProposalValidator, state::State, state_machine::StateMachine,
     state_output::StateOutput,
 };
-use flexnet_chain::hash::Hash;
+use flexnet_chain::hash::Hash256;
 
 impl<P, V> StateMachine<P, V>
 where
@@ -85,7 +85,7 @@ where
     }
 
     /// Checks if the proposal hash is the same as the lock's proposal hash.
-    pub(crate) fn can_prevote_for_proposal(&self, proposal_hash: &Hash) -> bool {
+    pub(crate) fn can_prevote_for_proposal(&self, proposal_hash: &Hash256) -> bool {
         match &self.lock {
             Some(lock) => &lock.proposal_hash == proposal_hash,
             None => true,
@@ -93,7 +93,7 @@ where
     }
 
     /// Prevotes for a proposal or nil.
-    pub(crate) fn prevote(&mut self, proposal_and_hash: Option<(P, Hash)>) -> Vec<StateOutput<P>> {
+    pub(crate) fn prevote(&mut self, proposal_and_hash: Option<(P, Hash256)>) -> Vec<StateOutput<P>> {
         match proposal_and_hash {
             Some((proposal, proposal_hash)) => {
                 self.transite_to_prevote(Some(proposal), Some(proposal_hash))
@@ -106,7 +106,7 @@ where
     pub(crate) fn transite_to_prevote(
         &mut self,
         proposal: Option<P>,
-        prevote: Option<Hash>,
+        prevote: Option<Hash256>,
     ) -> Vec<StateOutput<P>> {
         let (prevote_set, precommit_set) = match &mut self.state {
             State::Propose {

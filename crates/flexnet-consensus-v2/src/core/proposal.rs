@@ -1,4 +1,4 @@
-use flexnet_chain::hash::Hash;
+use flexnet_chain::hash::Hash256;
 
 /// Proposal fact that has already passed external proposal validation.
 ///
@@ -14,7 +14,7 @@ pub enum Proposal {
     /// is already locked on the same block.
     Fresh {
         /// Proposed block hash.
-        block_hash: Hash,
+        block_hash: Hash256,
     },
     /// A proposal justified by a verified prevote quorum in a previous round.
     ///
@@ -25,6 +25,6 @@ pub enum Proposal {
         /// Previous round in this height where `block` had quorum prevotes.
         valid_round: u64,
         /// Proposed block hash.
-        block_hash: Hash,
+        block_hash: Hash256,
     },
 }

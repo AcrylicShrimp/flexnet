@@ -1,0 +1,153 @@
+use crate::message_kind::MessageKind;
+use flexnet_chain::{
+    address::Address,
+    codec::{DecodeError, Decoder},
+    crypto::{Ed25519Signature, VerificationError, verify},
+    hash::Hash256,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PrevotePayload {
+    pub height: u128,
+    pub round: u64,
+    pub address: Address,
+    pub proposal_hash: Option<Hash256>,
+}
+
+impl PrevotePayload {
+    pub fn new(height: u128, round: u64, address: Address, proposal_hash: Option<Hash256>) -> Self {
+        Self {
+            height,
+            round,
+            address,
+            proposal_hash,
+        }
+    }
+
+    pub fn signing_payload_len(&self, chain_id: &str) -> usize {
+        let magic = crate::consts::MAGIC_BYTES.len();
+        let protocol_version = 4;
+        let chain_id_len = 4;
+        let chain_id = chain_id.len();
+
+        let kind = 1;
+        let height = 16;
+        let round = 8;
+        let address = 32;
+        let proposal_hash_kind = 1;
+        let proposal_hash = if self.proposal_hash.is_some() { 32 } else { 0 };
+
+        magic
+            + protocol_version
+            + chain_id_len
+            + chain_id
+            + kind
+            + height
+            + round
+            + address
+            + proposal_hash_kind
+            + proposal_hash
+    }
+
+    pub fn encode_signing_payload(&self, chain_id: &str, out: &mut Vec<u8>) {
+        debug_assert!(chain_id.len() <= u32::MAX as usize, "chain_id is too long");
+
+        out.extend_from_slice(crate::consts::MAGIC_BYTES);
+        out.extend_from_slice(&crate::consts::PROTOCOL_VERSION.to_le_bytes());
+        out.extend_from_slice(&(chain_id.len() as u32).to_le_bytes());
+        out.extend_from_slice(chain_id.as_bytes());
+
+        out.extend_from_slice(&MessageKind::Prevote.into_u8().to_le_bytes());
+        out.extend_from_slice(&self.height.to_le_bytes());
+        out.extend_from_slice(&self.round.to_le_bytes());
+        out.extend_from_slice(self.address.as_bytes());
+        out.extend_from_slice(if self.proposal_hash.is_some() {
+            &[1]
+        } else {
+            &[0]
+        });
+
+        if let Some(proposal_hash) = self.proposal_hash {
+            out.extend_from_slice(proposal_hash.as_bytes());
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MsgPrevote {
+    pub payload: PrevotePayload,
+    pub signature: Ed25519Signature,
+}
+
+impl MsgPrevote {
+    pub fn new(payload: PrevotePayload, signature: Ed25519Signature) -> Self {
+        Self { payload, signature }
+    }
+
+    pub fn verify_signature(&self, chain_id: &str) -> Result<(), VerificationError> {
+        let mut out = Vec::with_capacity(self.payload.signing_payload_len(chain_id));
+        self.payload.encode_signing_payload(chain_id, &mut out);
+        verify(&self.payload.address, &self.signature, &out)
+    }
+}
+
+impl MsgPrevote {
+    pub fn encoded_len(&self) -> usize {
+        let height = 16;
+        let round = 8;
+        let address = 32;
+        let proposal_hash_kind = 1;
+        let proposal_hash = if self.payload.proposal_hash.is_some() {
+            32
+        } else {
+            0
+        };
+        let signature = 64;
+
+        height + round + address + proposal_hash_kind + proposal_hash + signature
+    }
+
+    pub fn encode_canonical(&self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.payload.height.to_le_bytes());
+        out.extend_from_slice(&self.payload.round.to_le_bytes());
+        out.extend_from_slice(self.payload.address.as_bytes());
+        out.extend_from_slice(if self.payload.proposal_hash.is_some() {
+            &[1]
+        } else {
+            &[0]
+        });
+
+        if let Some(proposal_hash) = self.payload.proposal_hash {
+            out.extend_from_slice(proposal_hash.as_bytes());
+        }
+
+        out.extend_from_slice(self.signature.as_bytes());
+    }
+
+    pub fn decode_canonical(input: &[u8]) -> Result<Self, DecodeError> {
+        let mut decoder = Decoder::new(input);
+        let decoded = Self::decode_from(&mut decoder)?;
+
+        decoder.finish()?;
+
+        Ok(decoded)
+    }
+
+    pub fn decode_from(decoder: &mut Decoder) -> Result<Self, DecodeError> {
+        let height = decoder.read_u128_le()?;
+        let round = decoder.read_u64_le()?;
+        let address = Address::new(decoder.read_fixed::<32>()?);
+        let proposal_hash_kind = decoder.read_u8_le()?;
+        let proposal_hash = if proposal_hash_kind == 1 {
+            Some(Hash256::new(decoder.read_fixed::<32>()?))
+        } else {
+            None
+        };
+        let signature = Ed25519Signature::new(decoder.read_fixed::<64>()?);
+
+        Ok(Self::new(
+            PrevotePayload::new(height, round, address, proposal_hash),
+            signature,
+        ))
+    }
+}

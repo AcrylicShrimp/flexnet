@@ -130,7 +130,7 @@ mod tests {
         chain_config::ChainConfig,
         chain_id::ChainId,
         chain_version::ChainVersion,
-        crypto::{SecretKey, address_from_secret_key, sign},
+        crypto::{Ed25519SecretKey, address_from_secret_key, sign},
         state::{StateDelta, StateView, WritableState},
         transactions::tx_transfer::{TransferPayload, TxTransfer},
     };
@@ -186,7 +186,7 @@ mod tests {
     }
 
     fn signed_transfer(
-        secret_key: &SecretKey,
+        secret_key: &Ed25519SecretKey,
         to: Address,
         amount: u128,
         nonce: u128,
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn reject_transfer_to_self() {
-        let secret_key = SecretKey::new([1; 32]);
+        let secret_key = Ed25519SecretKey::new([1; 32]);
         let address = address_from_secret_key(&secret_key);
         let tx = signed_transfer(&secret_key, address, 5, 0);
 
@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn reject_transfer_with_wrong_nonce() {
-        let alice_key = SecretKey::new([1; 32]);
+        let alice_key = Ed25519SecretKey::new([1; 32]);
         let bob = Address::new([2; 32]);
         let alice = address_from_secret_key(&alice_key);
         let tx = signed_transfer(&alice_key, bob, 5, 3);
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn reject_transfer_with_insufficient_balance() {
-        let alice_key = SecretKey::new([1; 32]);
+        let alice_key = Ed25519SecretKey::new([1; 32]);
         let bob = Address::new([2; 32]);
         let alice = address_from_secret_key(&alice_key);
         let tx = signed_transfer(&alice_key, bob, 11, 0);

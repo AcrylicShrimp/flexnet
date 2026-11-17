@@ -8,12 +8,12 @@ use crate::{
     state_machine::StateMachine,
     state_output::StateOutput,
 };
-use flexnet_chain::{address::Address, crypto::Signature, hash::Hash};
+use flexnet_chain::{address::Address, crypto::Ed25519Signature, hash::Hash256};
 
 pub(crate) struct PrevoteQuorumEntry<P> {
     proposal: Option<P>,
-    prevote: Option<Hash>,
-    quorum_hash: Option<Hash>,
+    prevote: Option<Hash256>,
+    quorum_hash: Option<Hash256>,
     evidences: Vec<Evidence>,
 }
 
@@ -27,8 +27,8 @@ where
         height: u128,
         round: u32,
         address: Address,
-        proposal_hash: Option<Hash>,
-        signature: Signature,
+        proposal_hash: Option<Hash256>,
+        signature: Ed25519Signature,
     ) -> Vec<StateOutput<P>> {
         if !self.is_same(height, round) {
             return vec![];
@@ -96,8 +96,8 @@ where
     pub(crate) fn collect_prevote(
         &mut self,
         address: Address,
-        hash: Option<Hash>,
-        signature: Signature,
+        hash: Option<Hash256>,
+        signature: Ed25519Signature,
     ) {
         let prevote_set = match &mut self.state {
             State::Propose { prevote_set, .. } => prevote_set,
@@ -132,12 +132,12 @@ where
     }
 
     /// Precommits for a proposal or nil.
-    pub(crate) fn precommit(&mut self, precommit: Option<Hash>) -> Vec<StateOutput<P>> {
+    pub(crate) fn precommit(&mut self, precommit: Option<Hash256>) -> Vec<StateOutput<P>> {
         self.transite_to_precommit(precommit)
     }
 
     /// Transites to the precommit state.
-    pub(crate) fn transite_to_precommit(&mut self, precommit: Option<Hash>) -> Vec<StateOutput<P>> {
+    pub(crate) fn transite_to_precommit(&mut self, precommit: Option<Hash256>) -> Vec<StateOutput<P>> {
         let (proposal, prevote) = match &mut self.state {
             State::Prevote {
                 proposal, prevote, ..

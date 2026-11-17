@@ -146,11 +146,19 @@ name = "flexnet-chain"
 version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
+ "flexnet-codec",
  "hex",
  "rand",
  "sha2",
  "thiserror",
  "zeroize",
+]
+
+[[package]]
+name = "flexnet-codec"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
 ]
 
 [[package]]

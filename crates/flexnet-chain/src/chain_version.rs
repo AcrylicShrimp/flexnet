@@ -1,30 +1,46 @@
+use flexnet_codec::{
+    canonical_decode::CanonicalDecode,
+    canonical_encode::CanonicalEncode,
+    decoder::{Decoder, DecoderError},
+    encoder::{Encoder, EncoderError},
+};
 use std::fmt::Display;
 
+const CHAIN_VERSION: u64 = 0x0000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ChainVersion(u16);
+pub struct ChainVersion;
 
 impl ChainVersion {
-    pub const fn new(version: u16) -> Self {
-        Self(version)
+    pub const fn into_u64(self) -> u64 {
+        CHAIN_VERSION
     }
+}
 
-    pub const fn into_u16(self) -> u16 {
-        self.0
+impl CanonicalEncode for ChainVersion {
+    fn encode_to(&self, encoder: &mut Encoder) -> Result<(), EncoderError> {
+        encoder.write_u64_le(CHAIN_VERSION);
+        Ok(())
+    }
+}
+
+impl CanonicalDecode for ChainVersion {
+    fn decode_from(decoder: &mut Decoder) -> Result<Self, DecoderError> {
+        let chain_version = decoder.read_u64_le()?;
+
+        if chain_version != CHAIN_VERSION {
+            return Err(DecoderError::InvalidDiscriminant {
+                type_name: "CHAIN_VERSION",
+                discriminant: CHAIN_VERSION,
+            });
+        }
+
+        Ok(Self)
     }
 }
 
 impl Display for ChainVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{:04x}", self.0)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::ChainVersion;
-
-    #[test]
-    fn displays_as_fixed_width_hex() {
-        assert_eq!(ChainVersion::new(0x0011).to_string(), "0x0011");
+        write!(f, "0x{:016x}", CHAIN_VERSION)
     }
 }

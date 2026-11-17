@@ -10,7 +10,7 @@ use crate::{
     },
     polka::Polka,
 };
-use flexnet_chain::{block::Block, crypto::sign, hash::Hash};
+use flexnet_chain::{block::Block, crypto::sign, hash::Hash256};
 
 pub fn make_propose_message_using_polka(
     height: u128,
@@ -67,7 +67,7 @@ pub fn make_propose_message_using_block(
 pub fn make_prevote_message(
     height: u128,
     round: u32,
-    proposal_hash: Option<Hash>,
+    proposal_hash: Option<Hash256>,
     consensus_config: &ConsensusConfig,
 ) -> MsgPrevote {
     let payload = PrevotePayload {
@@ -87,7 +87,7 @@ pub fn make_prevote_message(
 pub fn make_precommit_message(
     height: u128,
     round: u32,
-    proposal_hash: Option<Hash>,
+    proposal_hash: Option<Hash256>,
     consensus_config: &ConsensusConfig,
 ) -> MsgPrecommit {
     let payload = PrecommitPayload {

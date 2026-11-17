@@ -1,6 +1,5 @@
 use crate::{
     chain_config::ChainConfig,
-    codec::{DecodeError, Decoder},
     rules::rule_transfer::{
         TransferExecutionError, TransferVerificationError, execute_transfer,
         verify_transfer_stateless,
@@ -105,14 +104,14 @@ mod tests {
         address::Address,
         chain_id::ChainId,
         chain_version::ChainVersion,
-        crypto::{SecretKey, address_from_secret_key, sign},
+        crypto::{Ed25519SecretKey, address_from_secret_key, sign},
         transaction_kind::TransactionKind,
         transactions::tx_transfer::{TransferPayload, TxTransfer},
     };
 
     #[test]
     fn transaction_roundtrips_and_reports_kind() {
-        let secret_key = SecretKey::new([1; 32]);
+        let secret_key = Ed25519SecretKey::new([1; 32]);
         let payload = TransferPayload::new(
             ChainId::new(1),
             ChainVersion::new(1),

@@ -3,7 +3,7 @@ use crate::{
     block::Block,
     chain_config::ChainConfig,
     genesis::Genesis,
-    hash::{Hash, compute_block_hash},
+    hash::{Hash256, compute_block_hash},
     rules::rule_block::{BlockExecutionError, execute_block},
     state::WritableState,
 };
@@ -18,7 +18,7 @@ where
     state: S,
     validators: Vec<Address>,
     tip_block: Block,
-    tip_block_hash: Hash,
+    tip_block_hash: Hash256,
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -28,7 +28,7 @@ pub enum ChainAppendError {
     #[error("unexpected block height: expected {expected}, got {actual}")]
     UnexpectedBlockHeight { expected: u128, actual: u128 },
     #[error("previous block hash mismatch: expected {expected}, got {actual}")]
-    PreviousBlockHashMismatch { expected: Hash, actual: Hash },
+    PreviousBlockHashMismatch { expected: Hash256, actual: Hash256 },
     #[error("block execution failed: {0}")]
     BlockExecutionError(#[from] BlockExecutionError),
 }
@@ -74,7 +74,7 @@ where
         self.tip_height().checked_add(1)
     }
 
-    pub fn tip_block_hash(&self) -> Hash {
+    pub fn tip_block_hash(&self) -> Hash256 {
         self.tip_block_hash
     }
 
@@ -120,9 +120,9 @@ mod tests {
         chain_config::ChainConfig,
         chain_id::ChainId,
         chain_version::ChainVersion,
-        crypto::{SecretKey, address_from_secret_key, sign},
+        crypto::{Ed25519SecretKey, address_from_secret_key, sign},
         genesis::Genesis,
-        hash::{Hash, compute_state_hash},
+        hash::{Hash256, compute_state_hash},
         state::{StateDelta, StateView, WritableState},
         transaction::Transaction,
         transactions::tx_transfer::{TransferPayload, TxTransfer},
@@ -171,14 +171,14 @@ mod tests {
     }
 
     fn signed_transfer(
-        secret_key: &SecretKey,
+        secret_key: &Ed25519SecretKey,
         to: Address,
         amount: u128,
         nonce: u128,
     ) -> Transaction {
         let payload = TransferPayload::new(
             ChainId::new(1),
-            ChainVersion::new(1),
+            ChainVersion,
             address_from_secret_key(secret_key),
             to,
             amount,
@@ -199,8 +199,8 @@ mod tests {
 
     #[test]
     fn append_block_updates_tip_and_state() {
-        let alice_key = SecretKey::new([1; 32]);
-        let bob_key = SecretKey::new([2; 32]);
+        let alice_key = Ed25519SecretKey::new([1; 32]);
+        let bob_key = Ed25519SecretKey::new([2; 32]);
         let alice = address_from_secret_key(&alice_key);
         let bob = address_from_secret_key(&bob_key);
         let mut chain = Chain::new(Genesis::new(
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn reject_block_with_wrong_previous_hash_without_mutating_chain() {
-        let alice_key = SecretKey::new([1; 32]);
+        let alice_key = Ed25519SecretKey::new([1; 32]);
         let alice = address_from_secret_key(&alice_key);
         let mut chain = Chain::new(Genesis::new(
             config(),
@@ -242,8 +242,8 @@ mod tests {
             ChainId::new(1),
             ChainVersion::new(1),
             1,
-            Hash::new([9; 32]),
-            Hash::ZERO,
+            Hash256::new([9; 32]),
+            Hash256::ZERO,
             Vec::new(),
         );
 
@@ -251,7 +251,7 @@ mod tests {
             chain.append_block(block),
             Err(ChainAppendError::PreviousBlockHashMismatch {
                 expected: before.tip_block_hash(),
-                actual: Hash::new([9; 32]),
+                actual: Hash256::new([9; 32]),
             })
         );
         assert_eq!(chain, before);

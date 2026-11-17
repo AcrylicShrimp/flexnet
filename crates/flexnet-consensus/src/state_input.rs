@@ -1,5 +1,5 @@
 use crate::{justification::Justification, proposal::Proposal};
-use flexnet_chain::{address::Address, crypto::Signature, hash::Hash};
+use flexnet_chain::{address::Address, crypto::Ed25519Signature, hash::Hash256};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum StateInput<P>
@@ -23,15 +23,15 @@ where
         height: u128,
         round: u32,
         address: Address,
-        proposal_hash: Option<Hash>,
-        signature: Signature,
+        proposal_hash: Option<Hash256>,
+        signature: Ed25519Signature,
     },
     PrecommitReceived {
         height: u128,
         round: u32,
         address: Address,
-        proposal_hash: Option<Hash>,
-        signature: Signature,
+        proposal_hash: Option<Hash256>,
+        signature: Ed25519Signature,
     },
     RoundTimeout {
         height: u128,

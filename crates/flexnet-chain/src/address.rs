@@ -1,3 +1,9 @@
+use flexnet_codec::{
+    canonical_decode::CanonicalDecode,
+    canonical_encode::CanonicalEncode,
+    decoder::{Decoder, DecoderError},
+    encoder::{Encoder, EncoderError},
+};
 use std::fmt::{Debug, Display};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -22,6 +28,19 @@ impl Display for Address {
 impl Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Address({})", self)
+    }
+}
+
+impl CanonicalEncode for Address {
+    fn encode_to(&self, encoder: &mut Encoder) -> Result<(), EncoderError> {
+        encoder.write_fixed_bytes(&self.0);
+        Ok(())
+    }
+}
+
+impl CanonicalDecode for Address {
+    fn decode_from(decoder: &mut Decoder) -> Result<Self, DecoderError> {
+        Ok(Self::new(*decoder.read_fixed_bytes()?))
     }
 }
 

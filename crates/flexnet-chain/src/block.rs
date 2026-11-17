@@ -1,37 +1,38 @@
 use crate::{
     chain_id::ChainId,
     chain_version::ChainVersion,
-    codec::{DecodeError, Decoder},
-    hash::Hash,
+    domain::Domain,
+    hash::{BlockHash, StateHash},
+    magic::Magic,
     transaction::Transaction,
+};
+use flexnet_codec::{
+    canonical_decode::CanonicalDecode,
+    canonical_encode::CanonicalEncode,
+    decoder::{Decoder, DecoderError},
+    encoder::{Encoder, EncoderError},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Block {
-    pub chain_id: ChainId,
-    pub chain_version: ChainVersion,
+    pub previous_block_hash: BlockHash,
     pub block_height: u128,
-    pub previous_block_hash: Hash,
-    pub state_hash: Hash,
     pub transactions: Vec<Transaction>,
+    pub state_hash: StateHash,
 }
 
 impl Block {
     pub fn new(
-        chain_id: ChainId,
-        chain_version: ChainVersion,
+        previous_block_hash: BlockHash,
         block_height: u128,
-        previous_block_hash: Hash,
-        state_hash: Hash,
         transactions: Vec<Transaction>,
+        state_hash: StateHash,
     ) -> Self {
         Self {
-            chain_id,
-            chain_version,
-            block_height,
             previous_block_hash,
-            state_hash,
+            block_height,
             transactions,
+            state_hash,
         }
     }
 
@@ -42,11 +43,14 @@ impl Block {
 
 impl Block {
     pub fn encoded_len(&self) -> usize {
-        let chain_id = 2;
-        let chain_version = 2;
+        let magic = Magic::BYTES;
+        let domain = Domain::BYTES;
+        let chain_id = ChainId::BYTES;
+        let chain_version = ChainVersion::BYTES;
+
         let block_height = 16;
-        let previous_block_hash = 32;
-        let state_hash = 32;
+        let previous_block_hash = Hash256::BYTES;
+        let state_hash = Hash256::BYTES;
         let transactions_len = 2;
 
         let mut transactions = 0;
@@ -55,7 +59,9 @@ impl Block {
             transactions += transaction.encoded_len();
         }
 
-        chain_id
+        magic
+            + domain
+            + chain_id
             + chain_version
             + block_height
             + previous_block_hash
@@ -64,12 +70,15 @@ impl Block {
             + transactions
     }
 
-    pub fn encode_canonical(&self, out: &mut Vec<u8>) {
+    pub fn encode_canonical(&self, chain_id: ChainId, out: &mut Vec<u8>) {
         let transaction_count = u16::try_from(self.transactions.len())
             .expect("transaction count exceeds canonical u16 range");
 
-        out.extend_from_slice(&self.chain_id.into_u16().to_le_bytes());
-        out.extend_from_slice(&self.chain_version.into_u16().to_le_bytes());
+        out.extend_from_slice(&Magic.as_bytes());
+        out.extend_from_slice(&Domain::Block.into_u8().to_le_bytes());
+        out.extend_from_slice(&chain_id.into_u16().to_le_bytes());
+        out.extend_from_slice(&ChainVersion.as_bytes());
+
         out.extend_from_slice(&self.block_height.to_le_bytes());
         out.extend_from_slice(self.previous_block_hash.as_bytes());
         out.extend_from_slice(self.state_hash.as_bytes());
@@ -80,21 +89,24 @@ impl Block {
         }
     }
 
-    pub fn decode_canonical(input: &[u8]) -> Result<Self, DecodeError> {
+    pub fn decode_canonical(input: &[u8], chain_id: ChainId) -> Result<Self, DecodeError> {
         let mut decoder = Decoder::new(input);
-        let decoded = Self::decode_from(&mut decoder)?;
+        let decoded = Self::decode_from(&mut decoder, chain_id)?;
 
         decoder.finish()?;
 
         Ok(decoded)
     }
 
-    pub fn decode_from(decoder: &mut Decoder) -> Result<Self, DecodeError> {
-        let chain_id = ChainId::new(decoder.read_u16_le()?);
-        let chain_version = ChainVersion::new(decoder.read_u16_le()?);
+    pub fn decode_from(decoder: &mut Decoder, chain_id: ChainId) -> Result<Self, DecodeError> {
+        let _magic = decoder.read_magic()?;
+        let _domain = decoder.read_domain(Domain::Block)?;
+        let _chain_id = decoder.read_chain_id(chain_id)?;
+        let _chain_version = decoder.read_chain_version()?;
+
         let block_height = decoder.read_u128_le()?;
-        let previous_block_hash = Hash::new(decoder.read_fixed::<32>()?);
-        let state_hash = Hash::new(decoder.read_fixed::<32>()?);
+        let previous_block_hash = Hash256::new(decoder.read_fixed::<32>()?);
+        let state_hash = Hash256::new(decoder.read_fixed::<32>()?);
         let transactions_len = decoder.read_u16_le()?;
 
         let mut transactions = Vec::with_capacity(transactions_len as usize);
@@ -105,13 +117,26 @@ impl Block {
         }
 
         Ok(Self::new(
-            chain_id,
-            chain_version,
             block_height,
             previous_block_hash,
             state_hash,
             transactions,
         ))
+    }
+}
+
+impl CanonicalEncode for Block {
+    fn encode_to(&self, encoder: &mut Encoder) -> Result<(), EncoderError> {
+        self.previous_block_hash.encode_to(encoder)?;
+        self.block_height.encode_to(encoder)?;
+        todo!();
+        Ok(())
+    }
+}
+
+impl CanonicalDecode for Block {
+    fn decode_from(decoder: &mut Decoder) -> Result<Self, DecoderError> {
+        Ok(Self::new(*decoder.read_fixed_bytes()?))
     }
 }
 
@@ -122,14 +147,14 @@ mod tests {
         address::Address,
         chain_id::ChainId,
         chain_version::ChainVersion,
-        crypto::{SecretKey, address_from_secret_key, sign},
-        hash::Hash,
+        crypto::{Ed25519SecretKey, address_from_secret_key, sign},
+        hash::Hash256,
         transaction::Transaction,
         transactions::tx_transfer::{TransferPayload, TxTransfer},
     };
 
     fn signed_transfer(seed: u8, to_seed: u8, amount: u128, nonce: u128) -> Transaction {
-        let secret_key = SecretKey::new([seed; 32]);
+        let secret_key = Ed25519SecretKey::new([seed; 32]);
         let from = address_from_secret_key(&secret_key);
         let to = Address::new([to_seed; 32]);
         let payload = TransferPayload::new(
@@ -154,8 +179,8 @@ mod tests {
             ChainId::new(1),
             ChainVersion::new(1),
             42,
-            Hash::new([7; 32]),
-            Hash::new([9; 32]),
+            Hash256::new([7; 32]),
+            Hash256::new([9; 32]),
             vec![signed_transfer(1, 2, 5, 0), signed_transfer(2, 3, 2, 0)],
         );
         let mut encoded = Vec::with_capacity(block.encoded_len());

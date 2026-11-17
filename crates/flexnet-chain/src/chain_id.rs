@@ -1,3 +1,9 @@
+use flexnet_codec::{
+    canonical_decode::CanonicalDecode,
+    canonical_encode::CanonicalEncode,
+    decoder::{Decoder, DecoderError},
+    encoder::{Encoder, EncoderError},
+};
 use std::fmt::Display;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -16,6 +22,19 @@ impl ChainId {
 impl Display for ChainId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{:04x}", self.0)
+    }
+}
+
+impl CanonicalEncode for ChainId {
+    fn encode_to(&self, encoder: &mut Encoder) -> Result<(), EncoderError> {
+        encoder.write_u16_le(self.0);
+        Ok(())
+    }
+}
+
+impl CanonicalDecode for ChainId {
+    fn decode_from(decoder: &mut Decoder) -> Result<Self, DecoderError> {
+        Ok(Self(decoder.read_u16_le()?))
     }
 }
 

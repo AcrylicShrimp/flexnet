@@ -1,5 +1,5 @@
 use crate::core::{proposal_hint::ProposalHint, vote_target::VoteTarget};
-use flexnet_chain::hash::Hash;
+use flexnet_chain::hash::Hash256;
 
 /// Deterministic intents emitted by the safety core.
 ///
@@ -59,6 +59,6 @@ pub enum CoreEffect {
         /// Round whose precommit quorum committed the block.
         round: u64,
         /// Hash of the retained and validated block to commit.
-        block_hash: Hash,
+        block_hash: Hash256,
     },
 }

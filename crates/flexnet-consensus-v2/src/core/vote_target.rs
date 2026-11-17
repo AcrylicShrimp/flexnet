@@ -1,4 +1,4 @@
-use flexnet_chain::hash::Hash;
+use flexnet_chain::hash::Hash256;
 
 /// Value targeted by a prevote or precommit.
 ///
@@ -9,5 +9,5 @@ pub enum VoteTarget {
     /// Vote for no block.
     Nil,
     /// Vote for the block identified by this hash.
-    Block(Hash),
+    Block(Hash256),
 }

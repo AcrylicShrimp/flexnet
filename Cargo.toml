@@ -5,6 +5,7 @@ members = ["crates/*"]
 [workspace.dependencies]
 ed25519-dalek = "3.0.0-pre.6"
 flexnet-chain = { path = "crates/flexnet-chain" }
+flexnet-codec = { path = "crates/flexnet-codec" }
 flexnet-consensus = { path = "crates/flexnet-consensus" }
 flexnet-consensus-v2 = { path = "crates/flexnet-consensus-v2" }
 hex = "0.4"

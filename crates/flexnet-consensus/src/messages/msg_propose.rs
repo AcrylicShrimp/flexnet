@@ -3,8 +3,8 @@ use flexnet_chain::{
     address::Address,
     block::Block,
     codec::{DecodeError, Decoder},
-    crypto::{Signature, VerificationError, verify},
-    hash::{Hash, compute_block_hash},
+    crypto::{Ed25519Signature, VerificationError, verify},
+    hash::{Hash256, compute_block_hash},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -20,14 +20,14 @@ pub struct ProposePayload {
 pub struct ProposeJustificationPayload {
     pub height: u128,
     pub round: u32,
-    pub proposal_hash: Hash,
+    pub proposal_hash: Hash256,
     pub evidences: Vec<ProposeEvidencePayload>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProposeEvidencePayload {
     pub address: Address,
-    pub signature: Signature,
+    pub signature: Ed25519Signature,
 }
 
 impl ProposePayload {
@@ -85,7 +85,7 @@ impl ProposeJustificationPayload {
     pub fn new(
         height: u128,
         round: u32,
-        proposal_hash: Hash,
+        proposal_hash: Hash256,
         evidences: Vec<ProposeEvidencePayload>,
     ) -> Self {
         Self {
@@ -127,7 +127,7 @@ impl ProposeJustificationPayload {
 }
 
 impl ProposeEvidencePayload {
-    pub fn new(address: Address, signature: Signature) -> Self {
+    pub fn new(address: Address, signature: Ed25519Signature) -> Self {
         Self { address, signature }
     }
 
@@ -147,11 +147,11 @@ impl ProposeEvidencePayload {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MsgPropose {
     pub payload: ProposePayload,
-    pub signature: Signature,
+    pub signature: Ed25519Signature,
 }
 
 impl MsgPropose {
-    pub fn new(payload: ProposePayload, signature: Signature) -> Self {
+    pub fn new(payload: ProposePayload, signature: Ed25519Signature) -> Self {
         Self { payload, signature }
     }
 
@@ -241,14 +241,14 @@ impl MsgPropose {
 
             for _ in 0..evidence_count {
                 let address = Address::new(decoder.read_fixed::<32>()?);
-                let signature = Signature::new(decoder.read_fixed::<64>()?);
+                let signature = Ed25519Signature::new(decoder.read_fixed::<64>()?);
                 evidences.push(ProposeEvidencePayload::new(address, signature));
             }
 
             Some(ProposeJustificationPayload::new(
                 height,
                 round,
-                Hash::new(proposal_hash),
+                Hash256::new(proposal_hash),
                 evidences,
             ))
         } else if justification_option == 0 {
@@ -257,7 +257,7 @@ impl MsgPropose {
             return Err(DecodeError::InvalidInput);
         };
 
-        let signature = Signature::new(decoder.read_fixed::<64>()?);
+        let signature = Ed25519Signature::new(decoder.read_fixed::<64>()?);
 
         Ok(Self::new(
             ProposePayload::new(height, round, address, proposal, justification),

@@ -2,7 +2,7 @@ use crate::{
     address::Address,
     block::Block,
     chain_config::ChainConfig,
-    hash::{Hash, compute_state_hash},
+    hash::{Hash256, compute_state_hash},
     state::StateView,
 };
 
@@ -28,7 +28,7 @@ where
         }
     }
 
-    pub fn state_hash(&self) -> Hash {
+    pub fn state_hash(&self) -> Hash256 {
         compute_state_hash(&self.initial_state)
     }
 
@@ -37,7 +37,7 @@ where
             self.config.chain_id,
             self.config.chain_version,
             0,
-            Hash::ZERO,
+            Hash256::ZERO,
             self.state_hash(),
             Vec::new(),
         )
@@ -58,7 +58,7 @@ mod tests {
         chain_config::ChainConfig,
         chain_id::ChainId,
         chain_version::ChainVersion,
-        hash::{Hash, compute_state_hash},
+        hash::{Hash256, compute_state_hash},
         state::{StateDelta, StateView, WritableState},
     };
     use std::collections::BTreeMap;
@@ -118,7 +118,7 @@ mod tests {
         let block = genesis.block();
 
         assert_eq!(block.block_height, 0);
-        assert_eq!(block.previous_block_hash, Hash::ZERO);
+        assert_eq!(block.previous_block_hash, Hash256::ZERO);
         assert!(block.transactions.is_empty());
         assert_eq!(block.state_hash, compute_state_hash(&state));
     }

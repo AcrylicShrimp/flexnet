@@ -1,4 +1,4 @@
-use flexnet_chain::hash::Hash;
+use flexnet_chain::hash::Hash256;
 
 /// Stage of the fixed-height consensus core.
 ///
@@ -13,5 +13,5 @@ pub enum CoreStage {
     /// Waiting for precommit quorum evidence after casting or observing precommits.
     Precommit,
     /// A block is committed and the consensus core is waiting for the reactor to apply it and advance to the next height.
-    Commit { block_hash: Hash },
+    Commit { block_hash: Hash256 },
 }

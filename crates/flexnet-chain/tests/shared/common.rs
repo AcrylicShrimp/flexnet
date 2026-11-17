@@ -7,8 +7,8 @@ use flexnet_chain::{
     chain_id::ChainId,
     chain_version::ChainVersion,
     crypto::address_from_secret_key,
-    crypto::{SecretKey, sign},
-    hash::{Hash, compute_state_hash},
+    crypto::{Ed25519SecretKey, sign},
+    hash::{Hash256, compute_state_hash},
     state::WritableState,
     transaction::Transaction,
     transactions::tx_transfer::{TransferPayload, TxTransfer},
@@ -23,11 +23,11 @@ pub fn config() -> ChainConfig {
     }
 }
 
-pub fn secret_key(seed: u8) -> SecretKey {
-    SecretKey::new([seed; 32])
+pub fn secret_key(seed: u8) -> Ed25519SecretKey {
+    Ed25519SecretKey::new([seed; 32])
 }
 
-pub fn address_for(secret_key: &SecretKey) -> Address {
+pub fn address_for(secret_key: &Ed25519SecretKey) -> Address {
     address_from_secret_key(secret_key)
 }
 
@@ -36,7 +36,7 @@ pub fn state_with_accounts(accounts: &[(Address, Account)]) -> MemoryState {
 }
 
 pub fn signed_transfer(
-    secret_key: &SecretKey,
+    secret_key: &Ed25519SecretKey,
     to: Address,
     amount: u128,
     nonce: u128,
@@ -56,7 +56,7 @@ pub fn signed_transfer(
 
 pub fn block_with_transactions(
     previous_state: &MemoryState,
-    previous_block_hash: Hash,
+    previous_block_hash: Hash256,
     block_height: u128,
     transactions: Vec<Transaction>,
 ) -> (Block, MemoryState) {

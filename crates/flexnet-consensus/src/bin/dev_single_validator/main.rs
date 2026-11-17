@@ -15,7 +15,7 @@ use flexnet_chain::{
     chain_config::ChainConfig,
     chain_id::ChainId,
     chain_version::ChainVersion,
-    crypto::{SecretKey, address_from_secret_key},
+    crypto::{Ed25519SecretKey, address_from_secret_key},
     genesis::Genesis,
 };
 use flexnet_consensus::{consensus_config::ConsensusConfig, consensus_driver::ConsensusDriver};
@@ -28,7 +28,7 @@ use tokio::{
 
 #[tokio::main]
 async fn main() {
-    let secret_key = SecretKey::generate_random();
+    let secret_key = Ed25519SecretKey::generate_random();
     let address = address_from_secret_key(&secret_key);
 
     let chain_config = ChainConfig::new(ChainId::new(1), ChainVersion::new(1), 128);

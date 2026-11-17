@@ -290,10 +290,10 @@ fn next_round(round: u64) -> Result<u64, TransitionError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flexnet_chain::hash::Hash;
+    use flexnet_chain::hash::Hash256;
 
-    fn hash(byte: u8) -> Hash {
-        Hash::new([byte; 32])
+    fn hash(byte: u8) -> Hash256 {
+        Hash256::new([byte; 32])
     }
 
     fn propose_state(round: u64) -> CoreState {
@@ -306,7 +306,7 @@ mod tests {
         }
     }
 
-    fn locked_propose_state(round: u64, locked_round: u64, block_hash: Hash) -> CoreState {
+    fn locked_propose_state(round: u64, locked_round: u64, block_hash: Hash256) -> CoreState {
         CoreState {
             lock: Some(CoreLock {
                 locked_round,
@@ -1479,7 +1479,7 @@ mod tests {
         struct History {
             prevote_rounds: Vec<u64>,
             precommit_rounds: Vec<u64>,
-            commit: Option<(u64, Hash)>,
+            commit: Option<(u64, Hash256)>,
         }
 
         fn candidate_inputs(state: &CoreState) -> Vec<CoreInput> {

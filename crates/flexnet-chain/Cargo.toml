@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 ed25519-dalek = { workspace = true, features = ["rand_core"] }
+flexnet-codec.workspace = true
 hex.workspace = true
 rand.workspace = true
 sha2.workspace = true

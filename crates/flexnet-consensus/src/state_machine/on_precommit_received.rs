@@ -5,12 +5,12 @@ use crate::{
     state_machine::StateMachine,
     state_output::{RoundFailureReason, StateOutput},
 };
-use flexnet_chain::{address::Address, crypto::Signature, hash::Hash};
+use flexnet_chain::{address::Address, crypto::Ed25519Signature, hash::Hash256};
 
 pub(crate) struct PrecommitQuorumEntry<P> {
     proposal: Option<P>,
-    precommit: Option<Hash>,
-    quorum_hash: Option<Hash>,
+    precommit: Option<Hash256>,
+    quorum_hash: Option<Hash256>,
 }
 
 impl<P, V> StateMachine<P, V>
@@ -23,8 +23,8 @@ where
         height: u128,
         round: u32,
         address: Address,
-        proposal_hash: Option<Hash>,
-        signature: Signature,
+        proposal_hash: Option<Hash256>,
+        signature: Ed25519Signature,
     ) -> Vec<StateOutput<P>> {
         if !self.is_same(height, round) {
             return vec![];
@@ -56,8 +56,8 @@ where
     pub(crate) fn collect_precommit(
         &mut self,
         address: Address,
-        proposal_hash: Option<Hash>,
-        signature: Signature,
+        proposal_hash: Option<Hash256>,
+        signature: Ed25519Signature,
     ) {
         let precommit_set = match &mut self.state {
             State::Propose { precommit_set, .. } => precommit_set,

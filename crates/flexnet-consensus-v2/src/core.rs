@@ -1,14 +1,14 @@
-mod effect;
-mod input;
-mod lock;
-mod proposal;
-mod proposal_hint;
-mod stage;
-mod state;
-mod timeout_stage;
-mod transition;
-mod valid_proposal;
-mod vote_target;
+pub mod effect;
+pub mod input;
+pub mod lock;
+pub mod proposal;
+pub mod proposal_hint;
+pub mod stage;
+pub mod state;
+pub mod timeout_stage;
+pub mod transition;
+pub mod valid_proposal;
+pub mod vote_target;
 
 use crate::core::{
     effect::CoreEffect, input::CoreInput, stage::CoreStage, state::CoreState,

@@ -11,7 +11,7 @@ use flexnet_chain::{
     chain_config::ChainConfig,
     chain_id::ChainId,
     chain_version::ChainVersion,
-    crypto::{SecretKey, address_from_secret_key},
+    crypto::{Ed25519SecretKey, address_from_secret_key},
 };
 use flexnet_consensus::consensus_config::ConsensusConfig;
 
@@ -27,10 +27,10 @@ async fn main() {
     });
 
     let secrets = vec![
-        SecretKey::generate_random(),
-        SecretKey::generate_random(),
-        SecretKey::generate_random(),
-        SecretKey::generate_random(),
+        Ed25519SecretKey::generate_random(),
+        Ed25519SecretKey::generate_random(),
+        Ed25519SecretKey::generate_random(),
+        Ed25519SecretKey::generate_random(),
     ];
     let addresses = secrets
         .iter()

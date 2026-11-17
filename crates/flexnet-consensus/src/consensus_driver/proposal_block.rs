@@ -1,7 +1,7 @@
 use crate::proposal::Proposal;
 use flexnet_chain::{
     block::Block,
-    hash::{Hash, compute_block_hash},
+    hash::{Hash256, compute_block_hash},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -22,7 +22,7 @@ impl ProposalBlock {
 }
 
 impl Proposal for ProposalBlock {
-    fn hash(&self) -> Hash {
+    fn hash(&self) -> Hash256 {
         compute_block_hash(self.as_block())
     }
 }

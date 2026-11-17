@@ -6,7 +6,7 @@ use flexnet_chain::{
     block::Block,
     chain::Chain,
     genesis::Genesis,
-    hash::{Hash, compute_state_hash},
+    hash::{Hash256, compute_state_hash},
     state::{StateView, WritableState},
 };
 use shared::{
@@ -20,7 +20,7 @@ use shared::{
 fn build_long_scenario_block(
     addresses: &[Address],
     previous_state: &MemoryState,
-    previous_block_hash: Hash,
+    previous_block_hash: Hash256,
     block_height: u128,
     transfers_per_block: usize,
     expected_nonces: &mut [u128],
